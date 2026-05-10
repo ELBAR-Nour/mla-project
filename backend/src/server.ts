@@ -97,9 +97,9 @@ app.use('*', (req, res) => {
 const PORT = process.env.PORT || 3001;
 
 server.listen(PORT, () => {
-  console.log(`🚀 MedAL Backend running on port ${PORT}`);
-  console.log(`📊 ML Service: ${mlService.getBaseUrl()}`);
-  console.log(`🌐 WebSocket server ready`);
+  console.log(`MedAL Backend running on port ${PORT}`);
+  console.log(`ML Service: ${mlService.getBaseUrl()}`);
+  console.log(`WebSocket server ready`);
 });
 
 export default app;

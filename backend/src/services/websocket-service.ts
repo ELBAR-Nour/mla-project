@@ -26,7 +26,7 @@ export class WebSocketService {
       };
 
       this.clients.set(ws, client);
-      console.log(`🔗 WebSocket client connected: ${clientId}`);
+      console.log(`WebSocket client connected: ${clientId}`);
 
       ws.on('message', (data: Buffer) => {
         try {
@@ -38,7 +38,7 @@ export class WebSocketService {
       });
 
       ws.on('close', () => {
-        console.log(`🔌 WebSocket client disconnected: ${clientId}`);
+        console.log(`WebSocket client disconnected: ${clientId}`);
         this.clients.delete(ws);
       });
 
@@ -118,7 +118,7 @@ export class WebSocketService {
     }
 
     if (sentCount > 0) {
-      console.log(`📡 Broadcasted to ${sentCount} clients on topic '${topic}'`);
+      console.log(`Broadcasted to ${sentCount} clients on topic '${topic}'`);
     }
   }
 
@@ -136,7 +136,7 @@ export class WebSocketService {
     }
 
     if (sentCount > 0) {
-      console.log(`📡 Broadcasted to all ${sentCount} clients`);
+      console.log(`Broadcasted to all ${sentCount} clients`);
     }
   }
 
