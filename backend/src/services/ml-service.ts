@@ -175,4 +175,19 @@ export class MLService {
     const response = await this.client.post('/rl/reset');
     return response.data;
   }
+
+  // Checkpoint endpoints
+  async loadCheckpoint(checkpointName: string): Promise<any> {
+    const response = await this.client.post('/checkpoints/load', {
+      checkpoint_name: checkpointName,
+    });
+    return response.data;
+  }
+
+  async runInference(inputData: any): Promise<any> {
+    const response = await this.client.post('/inference/run', {
+      input_data: inputData,
+    });
+    return response.data;
+  }
 }

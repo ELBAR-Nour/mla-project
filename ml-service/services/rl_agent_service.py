@@ -1,184 +1,219 @@
-"""RL Agent Service for DQN-based annotation decisions"""
-import logging
-from typing import Dict, List, Optional
 import random
-from collections import deque
-
+import collections
+import numpy as np
 import torch
 import torch.nn as nn
 import torch.optim as optim
 import torch.nn.functional as F
-import numpy as np
 
-logger = logging.getLogger(__name__)
+CONFIG = {
+    "dqn_lr": 1e-4,
+    "gamma": 0.95,
+    "epsilon_start": 1.0,
+    "epsilon_end": 0.05,
+    "epsilon_decay": 0.88,
+    "replay_buffer_size": 10000,
+    "dqn_batch_size": 64,
+    "tau": 0.005,
+    "state_dim": 8,
+    "action_dim": 2,
+    "per_alpha": 0.6,
+    "per_beta_start": 0.4,
+    "per_beta_end": 1.0,
+    "per_eps": 1e-6,
+}
 
-class DQNNetwork(nn.Module):
-    """Deep Q-Network for annotation decisions"""
-    
-    def __init__(self, state_size: int = 4, action_size: int = 2):
+class QNetwork(nn.Module):
+    def __init__(self, state_dim: int, action_dim: int, hidden_dim: int = 128):
         super().__init__()
-        self.fc1 = nn.Linear(state_size, 128)
-        self.fc2 = nn.Linear(128, 64)
-        self.fc3 = nn.Linear(64, action_size)
-    
-    def forward(self, x: torch.Tensor) -> torch.Tensor:
-        x = F.relu(self.fc1(x))
-        x = F.relu(self.fc2(x))
-        x = self.fc3(x)
-        return x
+        self.net = nn.Sequential(
+            nn.Linear(state_dim, hidden_dim),
+            nn.LayerNorm(hidden_dim),
+            nn.ReLU(),
+            nn.Linear(hidden_dim, hidden_dim),
+            nn.LayerNorm(hidden_dim),
+            nn.ReLU(),
+            nn.Linear(hidden_dim, 64),
+            nn.ReLU(),
+            nn.Linear(64, action_dim),
+        )
+    def forward(self, x):
+        return self.net(x)
 
+class DuelingQNetwork(nn.Module):
+    def __init__(self, state_dim: int, action_dim: int, hidden_dim: int = 128):
+        super().__init__()
+        self.encoder = nn.Sequential(
+            nn.Linear(state_dim, hidden_dim), nn.LayerNorm(hidden_dim), nn.ReLU(),
+            nn.Linear(hidden_dim, hidden_dim), nn.LayerNorm(hidden_dim), nn.ReLU(),
+        )
+        self.value_head = nn.Sequential(nn.Linear(hidden_dim, 64), nn.ReLU(), nn.Linear(64, 1))
+        self.advantage_head = nn.Sequential(nn.Linear(hidden_dim, 64), nn.ReLU(), nn.Linear(64, action_dim))
 
-class RLAgentService:
-    """RL Agent for learning annotation strategy"""
-    
-    def __init__(self, device: torch.device, state_size: int = 4, action_size: int = 2):
+    def forward(self, x):
+        feats = self.encoder(x)
+        V = self.value_head(feats)
+        A = self.advantage_head(feats)
+        return V + (A - A.mean(dim=1, keepdim=True))
+
+Transition = collections.namedtuple('Transition', ('state', 'action', 'reward', 'next_state', 'done'))
+
+class PrioritisedReplayBuffer:
+    def __init__(self, capacity: int, alpha: float = 0.6):
+        self.capacity = capacity
+        self.alpha = alpha
+        self.buffer = []
+        self.pos = 0
+        self.priorities = np.zeros(capacity, dtype=np.float32)
+        self.max_priority = 1.0
+
+    def push(self, *args):
+        if len(self.buffer) < self.capacity:
+            self.buffer.append(None)
+        self.buffer[self.pos] = Transition(*args)
+        self.priorities[self.pos] = self.max_priority
+        self.pos = (self.pos + 1) % self.capacity
+
+    def sample(self, batch_size: int, beta: float = 0.4, device=None):
+        n = len(self.buffer)
+        probs = self.priorities[:n] ** self.alpha
+        probs /= probs.sum()
+        indices = np.random.choice(n, batch_size, replace=False, p=probs)
+        samples = [self.buffer[i] for i in indices]
+        weights = (n * probs[indices]) ** (-beta)
+        weights /= weights.max()
+        return samples, indices, torch.tensor(weights, dtype=torch.float32).to(device)
+
+    def update_priorities(self, indices, td_errors):
+        for idx, err in zip(indices, td_errors):
+            p = float(abs(err)) + CONFIG['per_eps']
+            self.priorities[idx] = p
+            self.max_priority = max(self.max_priority, p)
+
+    def __len__(self):
+        return len(self.buffer)
+
+class DQNAgent:
+    def __init__(self, state_dim: int, action_dim: int, device):
         self.device = device
-        self.state_size = state_size
-        self.action_size = action_size  # 0: predict, 1: request label
-        
-        # DQN components
-        self.q_network = DQNNetwork(state_size, action_size).to(device)
-        self.target_network = DQNNetwork(state_size, action_size).to(device)
-        self.target_network.load_state_dict(self.q_network.state_dict())
-        
-        self.optimizer = optim.Adam(self.q_network.parameters(), lr=0.001)
-        self.criterion = nn.MSELoss()
-        
-        # Replay buffer
-        self.memory = deque(maxlen=10000)
-        self.epsilon = 1.0  # Exploration rate
-        self.epsilon_decay = 0.995
-        self.epsilon_min = 0.01
-        self.gamma = 0.99  # Discount factor
-        
-        # Statistics
-        self.episode_rewards = []
-        self.episode_queries = []
-        
-    def remember(self, state: np.ndarray, action: int, reward: float, next_state: np.ndarray, done: bool):
-        """Store experience in replay buffer"""
-        self.memory.append((state, action, reward, next_state, done))
-    
-    def act(self, state: np.ndarray, training: bool = True) -> int:
-        """Choose action (epsilon-greedy)"""
-        if training and np.random.rand() < self.epsilon:
-            return np.random.choice([0, 1])
-        
-        state_tensor = torch.FloatTensor(state).unsqueeze(0).to(self.device)
-        
+        self.q_net = DuelingQNetwork(state_dim, action_dim).to(device)
+        self.target_net = DuelingQNetwork(state_dim, action_dim).to(device)
+        self.target_net.load_state_dict(self.q_net.state_dict())
+        self.target_net.eval()
+        self.optimizer = optim.Adam(self.q_net.parameters(), lr=CONFIG['dqn_lr'])
+        self.replay = PrioritisedReplayBuffer(CONFIG['replay_buffer_size'], CONFIG['per_alpha'])
+        self.epsilon = CONFIG['epsilon_start']
+        self.beta = CONFIG['per_beta_start']
+        self.step_count = 0
+        self.losses = []
+        self.tau = CONFIG['tau']
+
+    def select_action(self, state: np.ndarray) -> int:
+        if random.random() < self.epsilon:
+            return random.randint(0, CONFIG['action_dim'] - 1)
         with torch.no_grad():
-            q_values = self.q_network(state_tensor)
+            q = self.q_net(torch.tensor(state, dtype=torch.float32).unsqueeze(0).to(self.device))
+        return int(q.argmax().item())
+
+    def decay_epsilon(self):
+        self.epsilon = max(CONFIG['epsilon_end'], self.epsilon * CONFIG['epsilon_decay'])
+
+    def anneal_beta(self, episode: int, total_episodes: int):
+        frac = episode / max(total_episodes - 1, 1)
+        self.beta = CONFIG['per_beta_start'] + frac * (CONFIG['per_beta_end'] - CONFIG['per_beta_start'])
+
+    def update_target(self):
+        for tp, op in zip(self.target_net.parameters(), self.q_net.parameters()):
+            tp.data.copy_(self.tau * op.data + (1 - self.tau) * tp.data)
+
+    def train_step(self) -> float:
+        if len(self.replay) < CONFIG['dqn_batch_size']:
+            return 0.0
+        batch, indices, is_weights = self.replay.sample(CONFIG['dqn_batch_size'], self.beta, self.device)
+        states = torch.tensor(np.array([t.state for t in batch]), dtype=torch.float32).to(self.device)
+        actions = torch.tensor([t.action for t in batch], dtype=torch.long).to(self.device)
+        rewards = torch.tensor([t.reward for t in batch], dtype=torch.float32).to(self.device)
+        next_states = torch.tensor(np.array([t.next_state for t in batch]), dtype=torch.float32).to(self.device)
+        dones = torch.tensor([t.done for t in batch], dtype=torch.float32).to(self.device)
         
-        return q_values.max(1)[1].item()
-    
-    def replay(self, batch_size: int = 32):
-        """Train on mini-batch from replay buffer"""
-        if len(self.memory) < batch_size:
-            return
-        
-        batch = random.sample(self.memory, batch_size)
-        states, actions, rewards, next_states, dones = zip(*batch)
-        
-        states = torch.FloatTensor(np.array(states)).to(self.device)
-        actions = torch.LongTensor(actions).to(self.device)
-        rewards = torch.FloatTensor(rewards).to(self.device)
-        next_states = torch.FloatTensor(np.array(next_states)).to(self.device)
-        dones = torch.FloatTensor(dones).to(self.device)
-        
-        # Q-learning update
+        current_q = self.q_net(states).gather(1, actions.unsqueeze(1)).squeeze(1)
         with torch.no_grad():
-            target_q_values = self.target_network(next_states).max(1)[0]
-            target_q_values = rewards + (1 - dones) * self.gamma * target_q_values
-        
-        q_values = self.q_network(states).gather(1, actions.unsqueeze(1)).squeeze(1)
-        
-        loss = self.criterion(q_values, target_q_values)
+            best_actions = self.q_net(next_states).argmax(dim=1, keepdim=True)
+            next_q = self.target_net(next_states).gather(1, best_actions).squeeze(1)
+            target_q = rewards + CONFIG['gamma'] * next_q * (1 - dones)
+            
+        td_errors = (current_q - target_q).detach().cpu().numpy()
+        loss = (is_weights * F.smooth_l1_loss(current_q, target_q, reduction='none')).mean()
         
         self.optimizer.zero_grad()
         loss.backward()
+        torch.nn.utils.clip_grad_norm_(self.q_net.parameters(), max_norm=10.0)
         self.optimizer.step()
-        
-        return loss.item()
-    
-    def update_target_network(self):
-        """Update target network weights"""
-        self.target_network.load_state_dict(self.q_network.state_dict())
-    
-    def train_episode(self, env_step_fn, max_steps: int = 100) -> Dict:
-        """Train for one episode"""
-        state = np.random.rand(self.state_size)  # Random initial state
-        total_reward = 0
-        total_queries = 0
-        
-        for step in range(max_steps):
-            action = self.act(state, training=True)
-            reward, next_state, done = env_step_fn(action)
-            
-            self.remember(state, action, reward, next_state, done)
-            loss = self.replay(batch_size=32)
-            
-            total_reward += reward
-            if action == 1:  # Requesting label
-                total_queries += 1
-            
-            state = next_state
-            
-            if done:
-                break
-        
-        # Decay exploration rate
-        if self.epsilon > self.epsilon_min:
-            self.epsilon *= self.epsilon_decay
-        
-        self.episode_rewards.append(total_reward)
-        self.episode_queries.append(total_queries)
-        
+        self.step_count += 1
+        self.update_target()
+        if indices is not None:
+            self.replay.update_priorities(indices, np.abs(td_errors))
+        lv = loss.item()
+        self.losses.append(lv)
+        return lv
+
+class RLAgentService:
+    def __init__(self, device):
+        self.device = device
+        self.agent = DQNAgent(CONFIG['state_dim'], CONFIG['action_dim'], device)
+        self.annotation_service = None
+        self.latest_state = None
+
+    def set_annotation_service(self, annotation_service):
+        self.annotation_service = annotation_service
+
+    def get_state(self):
         return {
-            "episode_reward": total_reward,
-            "episode_queries": total_queries,
-            "epsilon": self.epsilon,
+            "epsilon": self.agent.epsilon,
+            "beta": self.agent.beta,
+            "replay_buffer_size": len(self.agent.replay),
+            "step_count": self.agent.step_count,
+            "latest_loss": self.agent.losses[-1] if self.agent.losses else 0.0,
+            "latest_state_vector": self.latest_state.tolist() if self.latest_state is not None else []
         }
-    
-    def get_policy(self, num_states: int = 1000) -> Dict:
-        """Get learned policy for various states"""
-        policy = {}
-        
-        self.q_network.eval()
-        with torch.no_grad():
-            for i in range(min(num_states, 100)):
-                state = np.random.rand(self.state_size)
-                state_tensor = torch.FloatTensor(state).unsqueeze(0).to(self.device)
-                q_values = self.q_network(state_tensor).cpu().numpy()[0]
-                
-                policy[str(i)] = {
-                    "state": state.tolist(),
-                    "q_values": q_values.tolist(),
-                    "best_action": int(np.argmax(q_values)),
-                    "action_names": ["predict", "request_label"],
-                }
-        
+
+    def get_policy(self):
         return {
-            "policy_samples": policy,
-            "total_episodes": len(self.episode_rewards),
+            "type": "DuelingDQN",
+            "state_dim": CONFIG['state_dim'],
+            "action_dim": CONFIG['action_dim']
         }
-    
-    def get_state(self) -> Dict:
-        """Get current agent state"""
-        return {
-            "epsilon": float(self.epsilon),
-            "episodes_trained": len(self.episode_rewards),
-            "avg_reward": float(np.mean(self.episode_rewards[-100:])) if self.episode_rewards else 0,
-            "avg_queries": float(np.mean(self.episode_queries[-100:])) if self.episode_queries else 0,
-            "memory_size": len(self.memory),
-        }
-    
+
     def reset(self):
-        """Reset agent"""
-        self.q_network = DQNNetwork(self.state_size, self.action_size).to(self.device)
-        self.target_network = DQNNetwork(self.state_size, self.action_size).to(self.device)
-        self.optimizer = optim.Adam(self.q_network.parameters(), lr=0.001)
-        self.memory.clear()
-        self.epsilon = 1.0
-        self.episode_rewards = []
-        self.episode_queries = []
-        logger.info("✅ RL agent reset")
+        self.agent = DQNAgent(CONFIG['state_dim'], CONFIG['action_dim'], self.device)
+        self.latest_state = None
+
+    async def train(self, episodes=10, learning_rate=None, gamma=None):
+        if learning_rate:
+            for param_group in self.agent.optimizer.param_groups:
+                param_group['lr'] = learning_rate
+        if gamma:
+            CONFIG['gamma'] = gamma
+            
+        if self.annotation_service is None:
+            raise Exception("Annotation service must be set before training to access environment.")
+            
+        results = []
+        for ep in range(episodes):
+            self.agent.anneal_beta(ep, episodes)
+            state = self.annotation_service.reset_env()
+            self.latest_state = state
+            total_reward = 0
+            done = False
+            while not done:
+                action = self.agent.select_action(state)
+                next_state, reward, done = self.annotation_service.step_env(action)
+                self.agent.replay.push(state, action, reward, next_state, float(done))
+                self.agent.train_step()
+                state = next_state
+                self.latest_state = state
+                total_reward += reward
+            self.agent.decay_epsilon()
+            results.append({"episode": ep+1, "total_reward": total_reward})
+            
+        return {"status": "success", "results": results}
