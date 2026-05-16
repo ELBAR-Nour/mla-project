@@ -4,7 +4,7 @@ import torch.nn as nn
 import torch.optim as optim
 import torch.nn.functional as F
 import numpy as np
-from sklearn.metrics import roc_auc_score, accuracy_score, f1_score, recall_score, precision_score, confusion_matrix, roc_curve
+from sklearn.metrics import roc_auc_score, accuracy_score, f1_score, recall_score, precision_score, confusion_matrix, roc_curve, matthews_corrcoef
 
 CONFIG = {
     "cnn_epochs": 15,
@@ -88,11 +88,19 @@ class ModelService:
                 auc = 0.5
                 
         avg = 'binary' if n_classes == 2 else 'macro'
+        
+        specificity = 0.0
+        if n_classes == 2:
+            tn, fp, fn, tp = confusion_matrix(labels_arr, preds_arr, labels=[0, 1]).ravel()
+            specificity = tn / (tn + fp) if (tn + fp) > 0 else 0.0
+            
         metrics = {
             'acc': acc, 'auc': auc,
             'f1': f1_score(labels_arr, preds_arr, average=avg, zero_division=0),
             'recall': recall_score(labels_arr, preds_arr, average=avg, zero_division=0),
             'precision': precision_score(labels_arr, preds_arr, average=avg, zero_division=0),
+            'specificity': float(specificity),
+            'mcc': float(matthews_corrcoef(labels_arr, preds_arr))
         }
         
         if return_raw:
