@@ -1,0 +1,7 @@
+{
+  "figures_dir": "figures",
+  "experiments_dir": "experiments",
+  "dataset": "pneumoniamnist",
+  "seed": 42,
+  "budget": 200
+}

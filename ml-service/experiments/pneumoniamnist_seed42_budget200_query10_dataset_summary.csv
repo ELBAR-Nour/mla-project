@@ -1,0 +1,7 @@
+Dataset,Split,Samples,Classes
+pneumoniamnist,Train,4708,2
+pneumoniamnist,Val,524,2
+pneumoniamnist,Test,624,2
+breastmnist,Train,546,2
+breastmnist,Val,78,2
+breastmnist,Test,156,2
