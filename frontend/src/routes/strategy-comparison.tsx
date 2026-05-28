@@ -1,5 +1,5 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { motion } from "framer-motion";
 import {
   Bar,
@@ -25,7 +25,8 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import { learningCurve, strategyTable } from "@/lib/mock-data";
+import { getExperimentSummary, type ExperimentSummary } from "@/lib/api";
+import { strategyDefinitions, strategyForNotebookName } from "@/lib/strategies";
 
 export const Route = createFileRoute("/strategy-comparison")({
   head: () => ({
@@ -44,13 +45,47 @@ const tooltipStyle = {
   fontSize: "12px",
 };
 
-type Key = "queries" | "accuracy" | "auc" | "efficiency";
+type Key = "queries" | "f1" | "auc" | "efficiency";
 
 function StrategyArena() {
   const [sortKey, setSortKey] = useState<Key>("efficiency");
   const [desc, setDesc] = useState(true);
+  const [summary, setSummary] = useState<ExperimentSummary | null>(null);
+  useEffect(() => {
+    void getExperimentSummary().then(setSummary).catch(() => setSummary(null));
+  }, []);
+
+  const strategyTable = useMemo(() => {
+    if (!summary) return [];
+    return summary.main_results.map((result) => {
+      const metric = summary.clinical_metrics.find((item) => item.strategy.toLowerCase() === result.strategy.toLowerCase());
+      const id = strategyForNotebookName(result.strategy);
+      const definition = strategyDefinitions.find((item) => item.id === id);
+      return {
+        strategy: definition?.label ?? result.strategy,
+        queries: result.queries,
+        f1: metric?.f1 ?? 0,
+        auc: result.final_test_auc,
+        efficiency: metric?.efficiency ?? result.alc / Math.max(result.queries, 1),
+      };
+    });
+  }, [summary]);
+
+  const learningCurve = useMemo(() => {
+    if (!summary) return [];
+    const rows = new Map<number, Record<string, number>>();
+    for (const point of summary.learning_curves) {
+      const id = strategyForNotebookName(point.strategy);
+      const existing = rows.get(point.queries) ?? { queries: point.queries };
+      existing[id] = point.test_auc;
+      rows.set(point.queries, existing);
+    }
+    return [...rows.values()].sort((a, b) => a.queries - b.queries);
+  }, [summary]);
+
   const sorted = [...strategyTable].sort((a, b) => (desc ? b[sortKey] - a[sortKey] : a[sortKey] - b[sortKey]));
   const sortBy = (k: Key) => { if (k === sortKey) setDesc((d) => !d); else { setSortKey(k); setDesc(true); } };
+  const leading = sorted[0];
 
   return (
     <motion.div initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} className="space-y-6">
@@ -63,9 +98,11 @@ function StrategyArena() {
             Head-to-head race between sampling strategies. Efficiency = AUC ÷ queries used.
           </p>
         </div>
-        <Badge variant="outline" className="gap-1.5 border-primary/30 text-primary">
-          <Trophy className="h-3 w-3" /> RL leads at +35% efficiency
-        </Badge>
+        {leading && (
+          <Badge variant="outline" className="gap-1.5 border-primary/30 text-primary">
+            <Trophy className="h-3 w-3" /> {leading.strategy} leads on {sortKey === "f1" ? "F1" : sortKey}
+          </Badge>
+        )}
       </div>
 
       <ChartContainer title="Race to High AUC" description="Animated AUC trajectory across query budget">
@@ -76,9 +113,18 @@ function StrategyArena() {
             <YAxis stroke="var(--muted-foreground)" fontSize={11} domain={[0.5, 1]} />
             <Tooltip contentStyle={tooltipStyle} />
             <Legend wrapperStyle={{ fontSize: 12 }} />
-            <Line type="monotone" dataKey="rl" stroke="var(--color-chart-1)" strokeWidth={3} dot={{ r: 2 }} animationDuration={1400} name="RL Agent" />
-            <Line type="monotone" dataKey="entropy" stroke="var(--color-chart-2)" strokeWidth={2} dot={false} animationDuration={1400} name="Entropy" />
-            <Line type="monotone" dataKey="random" stroke="var(--color-chart-3)" strokeWidth={2} dot={false} animationDuration={1400} name="Random" />
+            {strategyDefinitions.map((definition, index) => (
+              <Line
+                key={definition.id}
+                type="monotone"
+                dataKey={definition.id}
+                stroke={`var(--color-chart-${(index % 5) + 1})`}
+                strokeWidth={definition.kind === "rl" ? 3 : 2}
+                dot={definition.kind === "rl" ? { r: 2 } : false}
+                animationDuration={1400}
+                name={definition.label}
+              />
+            ))}
           </LineChart>
         </ResponsiveContainer>
       </ChartContainer>
@@ -90,10 +136,10 @@ function StrategyArena() {
               <TableHeader>
                 <TableRow>
                   <TableHead>Strategy</TableHead>
-                  {(["queries", "accuracy", "auc", "efficiency"] as Key[]).map((k) => (
+                  {(["queries", "f1", "auc", "efficiency"] as Key[]).map((k) => (
                     <TableHead key={k} className="text-right">
                       <Button variant="ghost" size="sm" onClick={() => sortBy(k)} className="h-7 capitalize">
-                        {k} <ArrowUpDown className="ml-1 h-3 w-3" />
+                        {k === "f1" ? "F1" : k} <ArrowUpDown className="ml-1 h-3 w-3" />
                       </Button>
                     </TableHead>
                   ))}
@@ -101,18 +147,19 @@ function StrategyArena() {
               </TableHeader>
               <TableBody>
                 {sorted.map((row) => {
-                  const isRL = row.strategy === "RL Agent";
+                  const isRL = row.strategy.includes("DQN");
+                  const isLeading = row.strategy === leading?.strategy;
                   return (
                     <TableRow key={row.strategy} className={isRL ? "bg-primary/5" : ""}>
                       <TableCell className="font-medium">
                         {row.strategy}
-                        {isRL && <Badge className="ml-2 bg-gradient-primary text-primary-foreground">Best</Badge>}
+                        {isLeading && <Badge className="ml-2 bg-gradient-primary text-primary-foreground">Top</Badge>}
                       </TableCell>
                       <TableCell className="text-right font-mono-num">{row.queries}</TableCell>
-                      <TableCell className="text-right font-mono-num">{(row.accuracy * 100).toFixed(1)}%</TableCell>
+                      <TableCell className="text-right font-mono-num">{row.f1.toFixed(3)}</TableCell>
                       <TableCell className="text-right font-mono-num">{row.auc.toFixed(3)}</TableCell>
                       <TableCell className="text-right font-mono-num font-semibold text-success">
-                        {row.efficiency.toFixed(3)}
+                        {row.efficiency.toFixed(6)}
                       </TableCell>
                     </TableRow>
                   );
@@ -125,10 +172,10 @@ function StrategyArena() {
         <ChartContainer title="Insights" description="Auto-generated from the run">
           <ul className="space-y-3 text-sm">
             {[
-              "RL agent reaches 0.90 AUC with 35% fewer expert queries.",
-              "Entropy sampling plateaus near 0.91 AUC after 240 queries.",
-              "RL agent becomes more selective after the 40-query mark.",
-              "Random sampling shows highest variance and lowest efficiency.",
+              "All rows come from the exported notebook experiment summary.",
+              "DQN-family policies are compared alongside Random, Margin, Entropy, BALD, and BADGE.",
+              "The curve uses test AUC from the long learning-curve CSV.",
+              "Efficiency is read from the notebook clinical metrics export.",
             ].map((t) => (
               <li key={t} className="flex gap-2 rounded-xl border border-border/60 bg-card/50 p-3">
                 <Sparkles className="mt-0.5 h-4 w-4 shrink-0 text-primary" />

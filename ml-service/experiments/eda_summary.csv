@@ -1,3 +1,0 @@
-dataset,n_train,n_val,n_test,n_classes,imbalance_ratio,pixel_mean,pixel_std,image_shape
-pneumoniamnist,4708,524,624,2,2.878,0.1438,0.3367,"(1, 28, 28)"
-breastmnist,546,78,156,2,2.714,-0.3448,0.4115,"(1, 28, 28)"

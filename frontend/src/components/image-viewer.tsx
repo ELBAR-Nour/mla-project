@@ -2,13 +2,13 @@ import { useState } from "react";
 import { ZoomIn, ZoomOut, Grid3x3, RotateCcw } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Toggle } from "@/components/ui/toggle";
-import xray from "@/assets/xray-sample.jpg";
 
 interface ImageViewerProps {
   imageId: string;
+  imageBase64?: string;
 }
 
-export function ImageViewer({ imageId }: ImageViewerProps) {
+export function ImageViewer({ imageId, imageBase64 }: ImageViewerProps) {
   const [zoom, setZoom] = useState(1);
   const [grid, setGrid] = useState(false);
   return (
@@ -47,13 +47,17 @@ export function ImageViewer({ imageId }: ImageViewerProps) {
         </div>
       </div>
       <div className="relative grid aspect-square place-items-center overflow-hidden bg-black">
-        <img
-          src={xray}
-          alt="Medical sample"
-          className="select-none object-contain transition-transform duration-300"
-          style={{ transform: `scale(${zoom})` }}
-          draggable={false}
-        />
+        {imageBase64 ? (
+          <img
+            src={`data:image/png;base64,${imageBase64}`}
+            alt="Medical sample"
+            className="select-none object-contain transition-transform duration-300"
+            style={{ transform: `scale(${zoom})` }}
+            draggable={false}
+          />
+        ) : (
+          <div className="text-xs text-muted-foreground">No sample loaded</div>
+        )}
         {grid && (
           <div
             className="pointer-events-none absolute inset-0 opacity-40"

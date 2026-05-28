@@ -1,12 +1,85 @@
 import express from 'express';
+import { body, validationResult } from 'express-validator';
 import { MLService } from '../services/ml-service';
 import { WebSocketService } from '../services/websocket-service';
 
 export const modelRoutes = (mlService: MLService, wsService: WebSocketService) => {
   const router = express.Router();
 
+  // List available .pt artifacts
+  router.get('/artifacts', async (req: express.Request, res: express.Response) => {
+    try {
+      const artifacts = await mlService.getModelArtifacts();
+      res.json(artifacts);
+    } catch (error: any) {
+      console.error('Model artifact listing error:', error);
+      res.status(500).json({
+        error: 'Failed to list model artifacts',
+        details: error.message,
+      });
+    }
+  });
+
+  // Load a classifier artifact
+  router.post('/load', [
+    body('model_name').isString().notEmpty(),
+  ], async (req: express.Request, res: express.Response) => {
+    try {
+      const errors = validationResult(req);
+      if (!errors.isEmpty()) {
+        return res.status(400).json({ errors: errors.array() });
+      }
+
+      const result = await mlService.loadModel(req.body.model_name);
+
+      wsService.broadcast('model', {
+        action: 'loaded',
+        result,
+      });
+
+      res.json(result);
+    } catch (error: any) {
+      console.error('Model loading error:', error);
+      res.status(500).json({
+        error: 'Failed to load model',
+        details: error.message,
+      });
+    }
+  });
+
+  // Run classifier inference
+  router.post('/inference', [
+    body('model_name').optional().isString(),
+    body('image_id').optional().isInt({ min: 0 }),
+    body('image_base64').optional().isString(),
+    body('dataset_name').optional().isString(),
+    body('split').optional().isString(),
+  ], async (req: express.Request, res: express.Response) => {
+    try {
+      const errors = validationResult(req);
+      if (!errors.isEmpty()) {
+        return res.status(400).json({ errors: errors.array() });
+      }
+
+      const result = await mlService.runInference(req.body);
+
+      wsService.broadcast('model', {
+        action: 'inference_completed',
+        result,
+      });
+
+      res.json(result);
+    } catch (error: any) {
+      console.error('Model inference error:', error);
+      res.status(500).json({
+        error: 'Failed to run model inference',
+        details: error.message,
+      });
+    }
+  });
+
   // Get model metrics
-  router.get('/metrics', async (req, res) => {
+  router.get('/metrics', async (req: express.Request, res: express.Response) => {
     try {
       const metrics = await mlService.getModelMetrics();
       res.json(metrics);
@@ -20,7 +93,7 @@ export const modelRoutes = (mlService: MLService, wsService: WebSocketService) =
   });
 
   // Get confusion matrix
-  router.get('/confusion-matrix', async (req, res) => {
+  router.get('/confusion-matrix', async (req: express.Request, res: express.Response) => {
     try {
       const cm = await mlService.getConfusionMatrix();
       res.json(cm);
@@ -34,7 +107,7 @@ export const modelRoutes = (mlService: MLService, wsService: WebSocketService) =
   });
 
   // Get ROC curve
-  router.get('/roc', async (req, res) => {
+  router.get('/roc', async (req: express.Request, res: express.Response) => {
     try {
       const roc = await mlService.getROCCurve();
       res.json(roc);

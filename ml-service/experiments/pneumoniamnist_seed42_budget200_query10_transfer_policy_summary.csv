@@ -1,4 +1,0 @@
-strategy,final_val_auc
-Random Transfer Baseline,0.9097744360902256
-Entropy Transfer Baseline,0.8253968253968254
-Dueling DQN Transfer,0.9181286549707602

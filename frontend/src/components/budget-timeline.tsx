@@ -3,7 +3,7 @@ import { CheckCircle2, Zap, Compass } from "lucide-react";
 import type { StepRecord } from "@/lib/store";
 import { cn } from "@/lib/utils";
 
-export function BudgetTimeline({ history }: { history: StepRecord[] }) {
+export function BudgetTimeline({ history, showReward = true }: { history: StepRecord[]; showReward?: boolean }) {
   const items = history.slice(-12).reverse();
   return (
     <div className="glass rounded-2xl p-5">
@@ -52,9 +52,11 @@ export function BudgetTimeline({ history }: { history: StepRecord[] }) {
                     <span className={cn("font-medium", isLabel ? "text-primary" : "text-warning")}>
                       {isLabel ? "Label" : "Predict"}
                     </span>
-                    <span className={cn("font-mono-num", s.reward >= 0 ? "text-success" : "text-destructive")}>
-                      {s.reward >= 0 ? "+" : ""}{s.reward.toFixed(2)}
-                    </span>
+                    {showReward && (
+                      <span className={cn("font-mono-num", s.reward >= 0 ? "text-success" : "text-destructive")}>
+                        {s.reward >= 0 ? "+" : ""}{s.reward.toFixed(2)}
+                      </span>
+                    )}
                   </div>
                 </div>
               </motion.li>

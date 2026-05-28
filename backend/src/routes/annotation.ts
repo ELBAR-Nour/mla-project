@@ -11,7 +11,7 @@ export const annotationRoutes = (mlService: MLService, wsService: WebSocketServi
     body('image_id').isInt({ min: 0 }),
     body('action').isIn(['predict', 'request_label']),
     body('budget_remaining').isInt({ min: 0 }),
-  ], async (req, res) => {
+  ], async (req: express.Request, res: express.Response) => {
     try {
       const errors = validationResult(req);
       if (!errors.isEmpty()) {

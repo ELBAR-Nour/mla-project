@@ -1,6 +1,6 @@
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { motion } from "framer-motion";
-import { FlaskConical, Play, Brain, Shuffle, Gauge } from "lucide-react";
+import { FlaskConical, Play } from "lucide-react";
 import { ChartContainer } from "@/components/chart-container";
 import { Label } from "@/components/ui/label";
 import { Slider } from "@/components/ui/slider";
@@ -13,7 +13,8 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { useApp, type Strategy } from "@/lib/store";
+import { useApp } from "@/lib/store";
+import { isRLStrategy, strategyDefinitions } from "@/lib/strategies";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
 
@@ -27,12 +28,13 @@ export const Route = createFileRoute("/experiment-setup")({
   component: ExperimentSetup,
 });
 
-const strategies: { id: Strategy; label: string; icon: React.ReactNode; desc: string }[] = [
+const strategies = strategyDefinitions;
+/*
   { id: "random", label: "Random", icon: <Shuffle className="h-4 w-4" />, desc: "Uniform random sampling — baseline." },
   { id: "entropy", label: "Entropy", icon: <Gauge className="h-4 w-4" />, desc: "Query the most uncertain samples." },
   { id: "rl", label: "RL Agent", icon: <Brain className="h-4 w-4" />, desc: "Learns when to query vs. predict." },
-];
 
+*/
 function ExperimentSetup() {
   const { dataset, setDataset, budget, setBudget, strategy, setStrategy, rl, setRL, startExperiment } = useApp();
   const navigate = useNavigate();
@@ -71,7 +73,7 @@ function ExperimentSetup() {
               </SelectContent>
             </Select>
             <p className="text-xs text-muted-foreground">
-              Pool size simulated at 80 samples for the demo.
+              Pool size loads up to 80 samples from the ML service.
             </p>
           </div>
         </ChartContainer>
@@ -90,7 +92,7 @@ function ExperimentSetup() {
         </ChartContainer>
 
         <ChartContainer className="lg:col-span-2" title="Sampling Strategy" description="Who decides which samples to label">
-          <div className="grid gap-3 sm:grid-cols-3">
+          <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
             {strategies.map((s) => {
               const active = strategy === s.id;
               return (
@@ -119,6 +121,7 @@ function ExperimentSetup() {
           </div>
         </ChartContainer>
 
+        {isRLStrategy(strategy) && (
         <ChartContainer
           className="lg:col-span-2"
           title="RL Configuration"
@@ -131,6 +134,7 @@ function ExperimentSetup() {
             <RLSlider label="Learning rate" value={rl.learningRate * 10000} min={1} max={50} step={1} fmt={(v) => `${(v / 10).toFixed(1)}e-4`} onChange={(v) => setRL("learningRate", v / 10000)} hint="Policy step size" />
           </div>
         </ChartContainer>
+        )}
       </div>
 
       <div className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-primary/30 bg-primary/5 p-4">

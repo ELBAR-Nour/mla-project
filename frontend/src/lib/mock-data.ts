@@ -1,4 +1,15 @@
-// Mock data for the RL Active Learning demo.
+// Deterministic precomputed data for charts that are not live inference surfaces.
+
+function mulberry32(seed: number) {
+  return () => {
+    let t = (seed += 0x6d2b79f5);
+    t = Math.imul(t ^ (t >>> 15), t | 1);
+    t ^= t + Math.imul(t ^ (t >>> 7), t | 61);
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+  };
+}
+
+const rng = mulberry32(2048);
 
 export const learningCurve = Array.from({ length: 21 }, (_, i) => {
   const q = i * 25;
@@ -26,13 +37,13 @@ export const rocCurve = Array.from({ length: 21 }, (_, i) => {
 
 export const trainingCurves = Array.from({ length: 30 }, (_, i) => ({
   epoch: i + 1,
-  loss: +(1.4 * Math.exp(-i / 8) + 0.12 + Math.random() * 0.04).toFixed(3),
-  accuracy: +(0.55 + 0.4 * (1 - Math.exp(-i / 6)) + Math.random() * 0.01).toFixed(3),
+  loss: +(1.4 * Math.exp(-i / 8) + 0.12 + rng() * 0.04).toFixed(3),
+  accuracy: +(0.55 + 0.4 * (1 - Math.exp(-i / 6)) + rng() * 0.01).toFixed(3),
 }));
 
 export const entropyHistogram = Array.from({ length: 12 }, (_, i) => ({
   bin: +((i + 0.5) * (1 / 12)).toFixed(2),
-  count: Math.round(40 * Math.exp(-Math.pow((i - 6) / 3, 2)) + Math.random() * 8),
+  count: Math.round(40 * Math.exp(-Math.pow((i - 6) / 3, 2)) + rng() * 8),
   selected: Math.round(20 * Math.exp(-Math.pow((i - 9) / 2, 2))),
 }));
 

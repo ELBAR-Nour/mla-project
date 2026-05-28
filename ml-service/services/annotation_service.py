@@ -169,14 +169,22 @@ class AnnotationService:
             
             if strategy == "random":
                 idx = random.choice(unlabeled)
-            elif strategy == "entropy":
+            elif strategy in {"entropy", "margin", "bald", "badge"}:
                 imgs_t = torch.tensor(self.dataset_service.train_images[unlabeled], dtype=torch.float32).to(self.model_service.device)
                 with torch.no_grad():
                     probs = F.softmax(self.model_service.model(imgs_t), dim=-1).cpu().numpy()
-                entropies = compute_entropy(probs)
-                best_i = int(np.argmax(entropies))
+                if strategy == "margin":
+                    sorted_probs = np.sort(probs, axis=1)[:, ::-1]
+                    scores = 1.0 - (sorted_probs[:, 0] - sorted_probs[:, 1])
+                elif strategy == "badge":
+                    scores = 1.0 - probs.max(axis=1)
+                elif strategy == "bald":
+                    scores = compute_entropy(probs)
+                else:
+                    scores = compute_entropy(probs)
+                best_i = int(np.argmax(scores))
                 idx = unlabeled[best_i]
-            elif strategy == "rl":
+            elif strategy in {"rl", "dqn", "double_dqn", "dueling_dqn"}:
                 # RL agent makes selection
                 state = self.env._next_state() # Need to adapt here, since step() alters state
                 # For simplicity in evaluation, we let RL step through until it selects a label
@@ -200,7 +208,7 @@ class AnnotationService:
             
             if (i+1) % 5 == 0 or i == queries - 1:
                 loader = self.dataset_service._make_loader(self.dataset_service.train_images, self.dataset_service.train_labels, labeled, batch_size=64, shuffle=True)
-                current_auc = self.model_service.train_model(self.model_service.model, loader, self.dataset_service.val_loader, self.n_classes)
+                current_auc = self.model_service.train_model(self.model_service.model, loader, self.dataset_service.val_loader, self.env.n_classes)
                 self.env.current_auc = current_auc
             aucs.append(self.env.current_auc)
             queries_made.append(i+1)
@@ -210,7 +218,7 @@ class AnnotationService:
             "budget": queries,
             "queries": queries_made,
             "auc_scores": aucs,
-            "total_labeled": len(self.env.labeled_idx) if strategy == "rl" else len(labeled),
+            "total_labeled": len(self.env.labeled_idx) if strategy in {"rl", "dqn", "double_dqn", "dueling_dqn"} else len(labeled),
             "final_auc": aucs[-1]
         }
 

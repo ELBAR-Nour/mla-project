@@ -11,7 +11,7 @@ export const datasetRoutes = (mlService: MLService, wsService: WebSocketService)
     body('dataset_name').optional().isString(),
     body('split').optional().isString(),
     body('sample_size').optional().isInt({ min: 1 }),
-  ], async (req, res) => {
+  ], async (req: express.Request, res: express.Response) => {
     try {
       const errors = validationResult(req);
       if (!errors.isEmpty()) {
@@ -38,7 +38,7 @@ export const datasetRoutes = (mlService: MLService, wsService: WebSocketService)
   });
 
   // Get dataset info
-  router.get('/info', async (req, res) => {
+  router.get('/info', async (req: express.Request, res: express.Response) => {
     try {
       const info = await mlService.getDatasetInfo();
       res.json(info);
@@ -54,7 +54,7 @@ export const datasetRoutes = (mlService: MLService, wsService: WebSocketService)
   // Get single sample
   router.get('/sample/:imageId', [
     param('imageId').isInt({ min: 0 }),
-  ], async (req, res) => {
+  ], async (req: express.Request, res: express.Response) => {
     try {
       const errors = validationResult(req);
       if (!errors.isEmpty()) {
@@ -76,7 +76,7 @@ export const datasetRoutes = (mlService: MLService, wsService: WebSocketService)
   // Get batch of samples
   router.get('/batch', [
     query('count').optional().isInt({ min: 1, max: 100 }),
-  ], async (req, res) => {
+  ], async (req: express.Request, res: express.Response) => {
     try {
       const errors = validationResult(req);
       if (!errors.isEmpty()) {

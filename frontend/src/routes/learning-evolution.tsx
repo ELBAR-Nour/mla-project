@@ -19,12 +19,13 @@ import { Brain, Compass, Target, TrendingUp } from "lucide-react";
 import { ChartContainer } from "@/components/chart-container";
 import { MetricCard } from "@/components/metric-card";
 import { useApp } from "@/lib/store";
+import { isRLStrategy, strategyById } from "@/lib/strategies";
 
 export const Route = createFileRoute("/learning-evolution")({
   head: () => ({
     meta: [
       { title: "Learning Evolution — MedAL" },
-      { name: "description", content: "Watch the RL agent's AUC, accuracy, reward and policy mix evolve over time." },
+      { name: "description", content: "Watch strategy-specific AUC, accuracy, query usage, and policy metrics evolve over time." },
     ],
   }),
   component: LearningEvolution,
@@ -38,7 +39,7 @@ const tooltipStyle = {
 };
 
 function LearningEvolution() {
-  const { history } = useApp();
+  const { history, strategy } = useApp();
 
   if (history.length === 0) {
     return <EmptyEvolution />;
@@ -50,6 +51,8 @@ function LearningEvolution() {
   const exploit = history.length - explore;
   const totalReward = history.reduce((a, h) => a + h.reward, 0);
   const last = history[history.length - 1];
+  const policyMode = isRLStrategy(strategy);
+  const strategyLabel = strategyById[strategy].label;
 
   const policyData = [
     { name: "Request Label", value: labels, color: "var(--color-chart-1)" },
@@ -59,6 +62,11 @@ function LearningEvolution() {
     { name: "Exploit", value: exploit, color: "var(--color-chart-1)" },
     { name: "Explore", value: explore, color: "var(--color-chart-2)" },
   ];
+  const confidenceData = [
+    { name: "High confidence", value: history.filter((h) => h.confidence >= 0.8).length, color: "var(--color-chart-1)" },
+    { name: "Medium confidence", value: history.filter((h) => h.confidence >= 0.6 && h.confidence < 0.8).length, color: "var(--color-chart-2)" },
+    { name: "Low confidence", value: history.filter((h) => h.confidence < 0.6).length, color: "var(--color-chart-5)" },
+  ].filter((item) => item.value > 0);
 
   // Cumulative reward
   let acc = 0;
@@ -66,6 +74,11 @@ function LearningEvolution() {
     acc += h.reward;
     return { step: h.step, reward: +acc.toFixed(3) };
   });
+  const scoreCurve = history.map((h) => ({
+    step: h.step,
+    score: +h.expectedReward.toFixed(3),
+    confidence: h.confidence,
+  }));
 
   return (
     <motion.div initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} className="space-y-6">
@@ -74,15 +87,24 @@ function LearningEvolution() {
           Learning <span className="text-gradient">Evolution</span>
         </h1>
         <p className="mt-1 text-sm text-muted-foreground">
-          The agent's progress, policy mix, and exploration trade-off across the simulation.
+          {strategyLabel} progress, label usage, and model quality across the simulation.
         </p>
       </div>
 
       <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
         <MetricCard label="AUC" value={last.auc.toFixed(3)} hint="latest" icon={<TrendingUp className="h-5 w-5" />} />
         <MetricCard label="Accuracy" value={`${(last.accuracy * 100).toFixed(1)}%`} hint={`${history.length} steps`} tone="success" icon={<Target className="h-5 w-5" />} />
-        <MetricCard label="Cumulative Reward" value={totalReward.toFixed(2)} hint="total signal" tone={totalReward >= 0 ? "success" : "danger"} icon={<Brain className="h-5 w-5" />} />
-        <MetricCard label="Exploration Rate" value={`${((explore / history.length) * 100).toFixed(0)}%`} hint={`${explore} explore / ${exploit} exploit`} tone="warning" icon={<Compass className="h-5 w-5" />} />
+        {policyMode ? (
+          <>
+            <MetricCard label="Cumulative Reward" value={totalReward.toFixed(2)} hint="RL reward signal" tone={totalReward >= 0 ? "success" : "danger"} icon={<Brain className="h-5 w-5" />} />
+            <MetricCard label="Exploration Rate" value={`${((explore / history.length) * 100).toFixed(0)}%`} hint={`${explore} explore / ${exploit} exploit`} tone="warning" icon={<Compass className="h-5 w-5" />} />
+          </>
+        ) : (
+          <>
+            <MetricCard label="Labels Queried" value={`${labels}`} hint={`${strategyLabel} acquisition`} tone="warning" icon={<Brain className="h-5 w-5" />} />
+            <MetricCard label="Predictions" value={`${predicts}`} hint="automatic predictions" icon={<Compass className="h-5 w-5" />} />
+          </>
+        )}
       </div>
 
       <div className="grid gap-4 lg:grid-cols-3">
@@ -106,19 +128,33 @@ function LearningEvolution() {
           </ResponsiveContainer>
         </ChartContainer>
 
-        <ChartContainer title="Cumulative Reward" description="Total reward earned by the agent">
-          <ResponsiveContainer width="100%" height={300}>
-            <LineChart data={rewardCurve} margin={{ left: -10, right: 8 }}>
-              <CartesianGrid stroke="var(--border)" strokeDasharray="3 3" vertical={false} />
-              <XAxis dataKey="step" stroke="var(--muted-foreground)" fontSize={11} />
-              <YAxis stroke="var(--muted-foreground)" fontSize={11} />
-              <Tooltip contentStyle={tooltipStyle} />
-              <Line type="monotone" dataKey="reward" stroke="var(--color-chart-4)" strokeWidth={3} dot={false} />
-            </LineChart>
-          </ResponsiveContainer>
-        </ChartContainer>
+        {policyMode ? (
+          <ChartContainer title="Cumulative Reward" description="Total reward earned by the agent">
+            <ResponsiveContainer width="100%" height={300}>
+              <LineChart data={rewardCurve} margin={{ left: -10, right: 8 }}>
+                <CartesianGrid stroke="var(--border)" strokeDasharray="3 3" vertical={false} />
+                <XAxis dataKey="step" stroke="var(--muted-foreground)" fontSize={11} />
+                <YAxis stroke="var(--muted-foreground)" fontSize={11} />
+                <Tooltip contentStyle={tooltipStyle} />
+                <Line type="monotone" dataKey="reward" stroke="var(--color-chart-4)" strokeWidth={3} dot={false} />
+              </LineChart>
+            </ResponsiveContainer>
+          </ChartContainer>
+        ) : (
+          <ChartContainer title="Acquisition Score" description={`${strategyLabel} sample score over time`}>
+            <ResponsiveContainer width="100%" height={300}>
+              <LineChart data={scoreCurve} margin={{ left: -10, right: 8 }}>
+                <CartesianGrid stroke="var(--border)" strokeDasharray="3 3" vertical={false} />
+                <XAxis dataKey="step" stroke="var(--muted-foreground)" fontSize={11} />
+                <YAxis stroke="var(--muted-foreground)" fontSize={11} />
+                <Tooltip contentStyle={tooltipStyle} />
+                <Line type="monotone" dataKey="score" stroke="var(--color-chart-4)" strokeWidth={3} dot={false} name="Score" />
+              </LineChart>
+            </ResponsiveContainer>
+          </ChartContainer>
+        )}
 
-        <ChartContainer title="Policy Distribution" description="Label vs predict actions taken">
+        <ChartContainer title="Selection Distribution" description="Label vs predict actions taken">
           <ResponsiveContainer width="100%" height={240}>
             <PieChart>
               <Pie data={policyData} dataKey="value" innerRadius={50} outerRadius={80} paddingAngle={3}>
@@ -130,7 +166,9 @@ function LearningEvolution() {
           </ResponsiveContainer>
         </ChartContainer>
 
-        <ChartContainer title="Exploration vs Exploitation" description="ε-greedy split during the run">
+        {policyMode ? (
+
+        <ChartContainer title="Exploration vs Exploitation" description="Epsilon-greedy split during the run">
           <ResponsiveContainer width="100%" height={240}>
             <PieChart>
               <Pie data={explorationData} dataKey="value" innerRadius={50} outerRadius={80} paddingAngle={3}>
@@ -142,7 +180,22 @@ function LearningEvolution() {
           </ResponsiveContainer>
         </ChartContainer>
 
-        <ChartContainer title="Reward Per Step" description="Sparse positive/negative signals">
+        ) : (
+          <ChartContainer title="Confidence Bands" description="Classifier confidence of selected samples">
+            <ResponsiveContainer width="100%" height={240}>
+              <PieChart>
+                <Pie data={confidenceData} dataKey="value" innerRadius={50} outerRadius={80} paddingAngle={3}>
+                  {confidenceData.map((d, i) => <Cell key={i} fill={d.color} />)}
+                </Pie>
+                <Tooltip contentStyle={tooltipStyle} />
+                <Legend wrapperStyle={{ fontSize: 12 }} />
+              </PieChart>
+            </ResponsiveContainer>
+          </ChartContainer>
+        )}
+
+        {policyMode ? (
+        <ChartContainer title="Reward Per Step" description="Sparse positive/negative policy signal">
           <ResponsiveContainer width="100%" height={240}>
             <LineChart data={history} margin={{ left: -10, right: 8 }}>
               <CartesianGrid stroke="var(--border)" strokeDasharray="3 3" vertical={false} />
@@ -153,6 +206,19 @@ function LearningEvolution() {
             </LineChart>
           </ResponsiveContainer>
         </ChartContainer>
+        ) : (
+          <ChartContainer title="Confidence Per Step" description="Classifier certainty of selected samples">
+            <ResponsiveContainer width="100%" height={240}>
+              <LineChart data={scoreCurve} margin={{ left: -10, right: 8 }}>
+                <CartesianGrid stroke="var(--border)" strokeDasharray="3 3" vertical={false} />
+                <XAxis dataKey="step" stroke="var(--muted-foreground)" fontSize={11} />
+                <YAxis stroke="var(--muted-foreground)" fontSize={11} domain={[0, 1]} />
+                <Tooltip contentStyle={tooltipStyle} />
+                <Line type="monotone" dataKey="confidence" stroke="var(--color-chart-5)" strokeWidth={2} dot={false} />
+              </LineChart>
+            </ResponsiveContainer>
+          </ChartContainer>
+        )}
       </div>
     </motion.div>
   );
@@ -167,7 +233,7 @@ function EmptyEvolution() {
         </div>
         <h2 className="mt-4 font-display text-xl font-semibold">Nothing to learn from yet</h2>
         <p className="mt-2 text-sm text-muted-foreground">
-          Run a few steps in the Live Simulation. The agent's progress will appear here in real time.
+          Run a few steps in the Live Simulation. Strategy progress will appear here in real time.
         </p>
       </div>
     </div>

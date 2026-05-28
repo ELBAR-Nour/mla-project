@@ -1,4 +1,5 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
+import { useEffect, useMemo, useState } from "react";
 import { motion } from "framer-motion";
 import {
   Area,
@@ -18,14 +19,15 @@ import { ChartContainer } from "@/components/chart-container";
 import { BudgetBar } from "@/components/budget-bar";
 import { Button } from "@/components/ui/button";
 import { Toggle } from "@/components/ui/toggle";
-import { learningCurve } from "@/lib/mock-data";
+import { getExperimentSummary, type ExperimentSummary } from "@/lib/api";
 import { useApp } from "@/lib/store";
+import { strategyDefinitions, strategyForNotebookName } from "@/lib/strategies";
 
 export const Route = createFileRoute("/")({
   head: () => ({
     meta: [
       { title: "Dashboard — MedAL" },
-      { name: "description", content: "Experiment overview and learning efficiency for the RL active learning agent." },
+      { name: "description", content: "Experiment overview and learning efficiency for active-learning and RL strategies." },
     ],
   }),
   component: Dashboard,
@@ -39,7 +41,28 @@ const tooltipStyle = {
 };
 
 function Dashboard() {
-  const { visibleStrategies, toggleStrategy, budget, history, experimentStarted } = useApp();
+  const { visibleStrategies, toggleStrategy, budget, history, experimentStarted, strategy } = useApp();
+  const [summary, setSummary] = useState<ExperimentSummary | null>(null);
+  useEffect(() => {
+    void getExperimentSummary().then(setSummary).catch(() => setSummary(null));
+  }, []);
+
+  const curveData = useMemo(() => {
+    if (!summary) return [];
+    const rows = new Map<number, Record<string, number>>();
+    for (const point of summary.learning_curves) {
+      const id = strategyForNotebookName(point.strategy);
+      const existing = rows.get(point.queries) ?? { queries: point.queries };
+      existing[id] = point.test_auc;
+      rows.set(point.queries, existing);
+    }
+    return [...rows.values()].sort((a, b) => a.queries - b.queries);
+  }, [summary]);
+
+  const selectedNotebookName = strategyDefinitions.find((item) => item.id === strategy)?.notebookName ?? strategy;
+  const selectedResult = summary?.main_results.find(
+    (row) => row.strategy.toLowerCase() === selectedNotebookName.toLowerCase(),
+  );
   const used = history.filter((h) => h.action === "label").length;
   const last = history[history.length - 1];
   const accuracy = last ? `${(last.accuracy * 100).toFixed(1)}%` : "—";
@@ -53,7 +76,7 @@ function Dashboard() {
             Experiment <span className="text-gradient">Overview</span>
           </h1>
           <p className="mt-1 text-sm text-muted-foreground">
-            Live performance of the RL annotation agent across sampling strategies.
+            Live performance across the saved active-learning and RL strategies.
           </p>
         </div>
         <div className="flex gap-2">
@@ -69,8 +92,8 @@ function Dashboard() {
       </div>
 
       <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
-        <MetricCard label="Accuracy" value={accuracy} hint={experimentStarted ? "live" : "no run yet"} tone="success" icon={<Target className="h-5 w-5" />} />
-        <MetricCard label="AUC Score" value={auc} hint="latest step" icon={<Gauge className="h-5 w-5" />} />
+        <MetricCard label="Accuracy" value={last ? accuracy : selectedResult ? `${(selectedResult.final_test_auc * 100).toFixed(1)}%` : "N/A"} hint={experimentStarted ? "live" : "notebook test"} tone="success" icon={<Target className="h-5 w-5" />} />
+        <MetricCard label="AUC Score" value={last ? auc : selectedResult ? selectedResult.final_test_auc.toFixed(3) : "N/A"} hint={last ? "latest step" : "notebook test"} icon={<Gauge className="h-5 w-5" />} />
         <MetricCard label="Remaining Budget" value={`${budget - used}`} hint={`of ${budget} queries`} tone="warning" icon={<Coins className="h-5 w-5" />} />
         <MetricCard label="Queries Used" value={`${used}`} hint="this run" icon={<Activity className="h-5 w-5" />} />
       </div>
@@ -82,7 +105,9 @@ function Dashboard() {
           description="AUC achieved per number of expert annotations queried"
           actions={
             <div className="flex flex-wrap items-center gap-1.5">
-              {(["rl", "entropy", "random"] as const).map((s) => (
+              {strategyDefinitions.map((definition) => {
+                const s = definition.id;
+                return (
                 <Toggle
                   key={s}
                   size="sm"
@@ -92,16 +117,16 @@ function Dashboard() {
                 >
                   <span
                     className="h-2 w-2 rounded-full"
-                    style={{ background: `var(--color-chart-${s === "rl" ? 1 : s === "entropy" ? 2 : 3})` }}
+                    style={{ background: `var(--color-chart-${(strategyDefinitions.findIndex((item) => item.id === s) % 5) + 1})` }}
                   />
-                  {s === "rl" ? "RL Agent" : s === "entropy" ? "Entropy" : "Random"}
+                  {definition.shortLabel}
                 </Toggle>
-              ))}
+              )})}
             </div>
           }
         >
           <ResponsiveContainer width="100%" height={320}>
-            <AreaChart data={learningCurve} margin={{ left: -10, right: 8, top: 8 }}>
+            <AreaChart data={curveData} margin={{ left: -10, right: 8, top: 8 }}>
               <defs>
                 <linearGradient id="grad-rl" x1="0" y1="0" x2="0" y2="1">
                   <stop offset="0%" stopColor="var(--color-chart-1)" stopOpacity={0.4} />
@@ -112,9 +137,15 @@ function Dashboard() {
               <XAxis dataKey="queries" stroke="var(--muted-foreground)" fontSize={11} tickLine={false} axisLine={false} />
               <YAxis stroke="var(--muted-foreground)" fontSize={11} tickLine={false} axisLine={false} domain={[0.5, 1]} />
               <Tooltip contentStyle={tooltipStyle} />
-              {visibleStrategies.random && <Line type="monotone" dataKey="random" stroke="var(--color-chart-3)" strokeWidth={2} dot={false} name="Random" />}
-              {visibleStrategies.entropy && <Line type="monotone" dataKey="entropy" stroke="var(--color-chart-2)" strokeWidth={2} dot={false} name="Entropy" />}
-              {visibleStrategies.rl && <Area type="monotone" dataKey="rl" stroke="var(--color-chart-1)" strokeWidth={3} fill="url(#grad-rl)" name="RL Agent" />}
+              {strategyDefinitions.map((definition, index) => {
+                const color = `var(--color-chart-${(index % 5) + 1})`;
+                if (!visibleStrategies[definition.id]) return null;
+                return definition.kind === "rl" ? (
+                  <Area key={definition.id} type="monotone" dataKey={definition.id} stroke={color} strokeWidth={3} fill="url(#grad-rl)" name={definition.label} />
+                ) : (
+                  <Line key={definition.id} type="monotone" dataKey={definition.id} stroke={color} strokeWidth={2} dot={false} name={definition.label} />
+                );
+              })}
               <Legend iconType="circle" wrapperStyle={{ fontSize: 12 }} />
             </AreaChart>
           </ResponsiveContainer>
@@ -143,10 +174,10 @@ function Dashboard() {
 
           <ChartContainer title="Recent Activity" description="Last 10 queries">
             <ResponsiveContainer width="100%" height={140}>
-              <LineChart data={history.length ? history.slice(-10) : learningCurve.slice(-10)}>
+              <LineChart data={history.length ? history.slice(-10) : curveData.slice(-10)}>
                 <Line
                   type="monotone"
-                  dataKey={history.length ? "auc" : "rl"}
+                  dataKey={history.length ? "auc" : strategy}
                   stroke="var(--color-chart-1)"
                   strokeWidth={2}
                   dot={{ r: 3 }}

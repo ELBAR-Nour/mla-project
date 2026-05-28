@@ -1,18 +1,41 @@
 import os
 import random
+from pathlib import Path
 import numpy as np
 import torch
-import torchvision.transforms as transforms
 from torch.utils.data import DataLoader, TensorDataset
-import medmnist
-from medmnist import INFO
 import base64
 from io import BytesIO
 from PIL import Image
 
+try:
+    import torchvision.transforms as transforms
+except ImportError:
+    transforms = None
+
+try:
+    import medmnist
+    from medmnist import INFO
+except ImportError:
+    medmnist = None
+    INFO = {
+        "pneumoniamnist": {
+            "label": {"0": "normal", "1": "pneumonia"},
+            "task": "binary-class",
+            "python_class": "PneumoniaMNIST",
+        },
+        "breastmnist": {
+            "label": {"0": "malignant", "1": "normal/benign"},
+            "task": "binary-class",
+            "python_class": "BreastMNIST",
+        },
+    }
+
 class DatasetService:
     def __init__(self, device):
         self.device = device
+        self.service_root = Path(__file__).resolve().parents[1]
+        self.data_dir = Path(os.getenv("ML_DATA_DIR", self.service_root / "data"))
         self.dataset_name = None
         self.split = None
         self.n_classes = None
@@ -30,6 +53,8 @@ class DatasetService:
         self.info = None
 
     def get_transforms(self):
+        if transforms is None:
+            raise ImportError("torchvision is required when loading datasets through medmnist download.")
         return transforms.Compose([
             transforms.ToTensor(),
             transforms.Normalize(mean=[0.5], std=[0.5])
@@ -41,9 +66,54 @@ class DatasetService:
         self.info = INFO[self.dataset_name]
         self.n_classes = len(self.info['label'])
         self.task = self.info['task']
+
+        local_npz = self.data_dir / f"{self.dataset_name}.npz"
+        if local_npz.exists():
+            self._load_npz_dataset(local_npz)
+        else:
+            self._load_medmnist_dataset()
+
+        if sample_size is not None and sample_size < len(self.train_images):
+            indices = np.random.choice(len(self.train_images), sample_size, replace=False)
+            self.train_images = self.train_images[indices]
+            self.train_labels = self.train_labels[indices]
+
+        self.val_loader = self._make_loader(self.val_images, self.val_labels, shuffle=False)
+        self.test_loader = self._make_loader(self.test_images, self.test_labels, shuffle=False)
+
+        self._initialise_pools(len(self.train_images), 100)
+
+    def _prepare_images(self, images):
+        images = images.astype(np.float32)
+        if images.max() > 1.0:
+            images = images / 255.0
+        if images.ndim == 3:
+            images = images[:, None, :, :]
+        elif images.ndim == 4 and images.shape[-1] in (1, 3):
+            images = np.moveaxis(images, -1, 1)
+        return (images - 0.5) / 0.5
+
+    def _prepare_labels(self, labels):
+        return labels.reshape(-1).astype(np.int64)
+
+    def _load_npz_dataset(self, path):
+        data = np.load(path)
+        self.train_images = self._prepare_images(data["train_images"])
+        self.train_labels = self._prepare_labels(data["train_labels"])
+        self.val_images = self._prepare_images(data["val_images"])
+        self.val_labels = self._prepare_labels(data["val_labels"])
+        self.test_images = self._prepare_images(data["test_images"])
+        self.test_labels = self._prepare_labels(data["test_labels"])
+
+    def _load_medmnist_dataset(self):
+        if medmnist is None:
+            raise ImportError(
+                f"{self.dataset_name}.npz was not found in {self.data_dir}, and medmnist is not installed."
+            )
+
         DataClass = getattr(medmnist, self.info['python_class'])
         transform = self.get_transforms()
-        root = './data'
+        root = str(self.data_dir)
         os.makedirs(root, exist_ok=True)
         
         train_ds = DataClass(split='train', transform=transform, download=True, root=root)
@@ -53,16 +123,6 @@ class DatasetService:
         self.train_images, self.train_labels = self._extract_arrays(train_ds)
         self.val_images, self.val_labels = self._extract_arrays(val_ds)
         self.test_images, self.test_labels = self._extract_arrays(test_ds)
-
-        if sample_size is not None and sample_size < len(self.train_images):
-            indices = np.random.choice(len(self.train_images), sample_size, replace=False)
-            self.train_images = self.train_images[indices]
-            self.train_labels = self.train_labels[indices]
-            
-        self.val_loader = self._make_loader(self.val_images, self.val_labels, shuffle=False)
-        self.test_loader = self._make_loader(self.test_images, self.test_labels, shuffle=False)
-        
-        self._initialise_pools(len(self.train_images), 100)
 
     def _extract_arrays(self, dataset):
         loader = DataLoader(dataset, batch_size=512, shuffle=False)

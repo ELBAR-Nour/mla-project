@@ -1,5 +1,4 @@
 import { motion } from "framer-motion";
-import xray from "@/assets/xray-sample.jpg";
 import type { Sample } from "@/lib/store";
 import { cn } from "@/lib/utils";
 
@@ -24,12 +23,12 @@ export function ImageStream({ current, upcoming }: Props) {
       </div>
 
       <div className="relative grid aspect-square place-items-center overflow-hidden bg-black">
-        {current ? (
+        {current?.imageBase64 ? (
           <motion.img
             key={current.id}
             initial={{ opacity: 0, scale: 1.04 }}
             animate={{ opacity: 1, scale: 1 }}
-            src={xray}
+            src={`data:image/png;base64,${current.imageBase64}`}
             alt={`Sample ${current.id}`}
             className="h-full w-full select-none object-contain"
             draggable={false}
@@ -41,10 +40,10 @@ export function ImageStream({ current, upcoming }: Props) {
           <>
             <div className="pointer-events-none absolute inset-0 ring-2 ring-inset ring-primary/40" />
             <div className="absolute left-3 top-3 rounded-md bg-black/60 px-2 py-0.5 font-mono-num text-[10px] text-white">
-              entropy {current.entropy.toFixed(2)}
+              entropy {current.liveLoaded ? current.entropy.toFixed(2) : "--"}
             </div>
             <div className="absolute right-3 top-3 rounded-md bg-black/60 px-2 py-0.5 font-mono-num text-[10px] text-white">
-              conf {(current.confidence * 100).toFixed(0)}%
+              conf {current.liveLoaded ? `${(current.confidence * 100).toFixed(0)}%` : "--"}
             </div>
           </>
         )}
@@ -62,14 +61,22 @@ export function ImageStream({ current, upcoming }: Props) {
             <div
               key={s.id}
               className={cn(
-                "flex h-12 w-16 shrink-0 flex-col items-center justify-center rounded-lg border bg-card/60 px-1 text-[10px]",
+                "relative flex h-12 w-16 shrink-0 flex-col items-center justify-center overflow-hidden rounded-lg border bg-card/60 px-1 text-[10px]",
                 i === 0 ? "border-primary/50" : "border-border/60",
               )}
               title={s.id}
             >
-              <span className="font-mono-num">{s.id.slice(-4)}</span>
-              <span className="font-mono-num text-muted-foreground">
-                e{s.entropy.toFixed(2)}
+              {s.imageBase64 && (
+                <img
+                  src={`data:image/png;base64,${s.imageBase64}`}
+                  alt=""
+                  className="absolute inset-0 h-full w-full object-contain opacity-70"
+                  draggable={false}
+                />
+              )}
+              <span className="relative rounded bg-background/75 px-1 font-mono-num">{s.id.slice(-4)}</span>
+              <span className="relative rounded bg-background/75 px-1 font-mono-num text-muted-foreground">
+                {s.liveLoaded ? `e${s.entropy.toFixed(2)}` : "e--"}
               </span>
             </div>
           ))}

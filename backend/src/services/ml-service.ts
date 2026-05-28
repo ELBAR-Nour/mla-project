@@ -48,11 +48,59 @@ export interface StrategyComparison {
   }>;
 }
 
+export interface ExperimentSummary {
+  config: Record<string, any>;
+  artifact_manifest: Record<string, any>;
+  dataset_summary: Record<string, any>[];
+  main_results: Record<string, any>[];
+  clinical_metrics: Record<string, any>[];
+  learning_curves: Record<string, any>[];
+  multiseed_summary: Record<string, any>[];
+}
+
+export interface ModelArtifact {
+  name: string;
+  strategy?: string;
+  source?: string;
+  architecture?: string;
+  n_classes?: number;
+  state_dim?: number;
+  action_dim?: number;
+  size_bytes?: number;
+  active?: boolean;
+  error?: string;
+}
+
+export interface ModelArtifactsResponse {
+  classifiers: ModelArtifact[];
+  checkpoints: ModelArtifact[];
+  active_model: string | null;
+  active_checkpoint: string | null;
+}
+
+export interface InferenceRequest {
+  model_name?: string;
+  image_id?: number;
+  image_base64?: string;
+  dataset_name?: string;
+  split?: string;
+}
+
+export interface RLDecisionRequest {
+  checkpoint_name?: string;
+  model_name?: string;
+  image_id: number;
+  dataset_name?: string;
+  split?: string;
+  budget_remaining?: number;
+  max_budget?: number;
+}
+
 export class MLService {
   private client: AxiosInstance;
   private baseUrl: string;
 
-  constructor(baseUrl: string = process.env.ML_SERVICE_URL || 'http://localhost:8000') {
+  constructor(baseUrl: string = process.env.ML_SERVICE_URL || 'http://127.0.0.1:8000') {
     this.baseUrl = baseUrl;
     this.client = axios.create({
       baseURL: baseUrl,
@@ -135,7 +183,29 @@ export class MLService {
     return response.data;
   }
 
+  async getExperimentSummary(): Promise<ExperimentSummary> {
+    const response = await this.client.get('/experiments/summary');
+    return response.data;
+  }
+
   // Model endpoints
+  async getModelArtifacts(): Promise<ModelArtifactsResponse> {
+    const response = await this.client.get('/models/artifacts');
+    return response.data;
+  }
+
+  async loadModel(modelName: string): Promise<any> {
+    const response = await this.client.post('/models/load', {
+      model_name: modelName,
+    });
+    return response.data;
+  }
+
+  async runInference(inputData: InferenceRequest): Promise<any> {
+    const response = await this.client.post('/inference/run', inputData);
+    return response.data;
+  }
+
   async getModelMetrics(): Promise<any> {
     const response = await this.client.get('/model/metrics');
     return response.data;
@@ -177,6 +247,11 @@ export class MLService {
   }
 
   // Checkpoint endpoints
+  async listCheckpoints(): Promise<any> {
+    const response = await this.client.get('/checkpoints');
+    return response.data;
+  }
+
   async loadCheckpoint(checkpointName: string): Promise<any> {
     const response = await this.client.post('/checkpoints/load', {
       checkpoint_name: checkpointName,
@@ -184,10 +259,8 @@ export class MLService {
     return response.data;
   }
 
-  async runInference(inputData: any): Promise<any> {
-    const response = await this.client.post('/inference/run', {
-      input_data: inputData,
-    });
+  async runRLDecision(request: RLDecisionRequest): Promise<any> {
+    const response = await this.client.post('/rl/decision', request);
     return response.data;
   }
 }

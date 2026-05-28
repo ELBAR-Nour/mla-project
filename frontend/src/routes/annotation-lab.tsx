@@ -1,7 +1,7 @@
 import { useEffect, useMemo } from "react";
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { motion } from "framer-motion";
-import { Play, Pause, StepForward, RotateCcw, FlaskConical } from "lucide-react";
+import { Play, Pause, StepForward, RotateCcw, FlaskConical, Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Slider } from "@/components/ui/slider";
 import { Badge } from "@/components/ui/badge";
@@ -10,13 +10,14 @@ import { DecisionEnginePanel } from "@/components/decision-engine-panel";
 import { BudgetTimeline } from "@/components/budget-timeline";
 import { BudgetBar } from "@/components/budget-bar";
 import { useApp } from "@/lib/store";
+import { isRLStrategy, strategyById } from "@/lib/strategies";
 import { toast } from "sonner";
 
 export const Route = createFileRoute("/annotation-lab")({
   head: () => ({
     meta: [
       { title: "Live Simulation — MedAL" },
-      { name: "description", content: "Step through the RL agent's annotation decisions in real time." },
+      { name: "description", content: "Step through the selected strategy's annotation decisions in real time." },
     ],
   }),
   component: AnnotationLab,
@@ -30,10 +31,16 @@ function AnnotationLab() {
     running,
     speedMs,
     experimentStarted,
+    dataMode,
+    loadingSamples,
+    loadingDecision,
+    liveError,
     budget,
     strategy,
     rl,
     stepOnce,
+    loadLiveSamples,
+    loadSampleDecision,
     setRunning,
     setSpeed,
     resetExperiment,
@@ -44,17 +51,28 @@ function AnnotationLab() {
   const upcoming = samples.slice(currentIndex + 1, currentIndex + 7);
   const used = history.filter((h) => h.action === "label").length;
   const lastStep = history[history.length - 1] ?? null;
+  const strategyInfo = strategyById[strategy];
+  const policyMode = isRLStrategy(strategy);
 
-  // Compute live preview of agent decision for current sample
+  // Compute live preview of the selected strategy for the current sample
   const preview = useMemo(() => {
     if (!current) return null;
-    const isExplore = strategy === "rl" && Math.random() < rl.epsilon * 0.3;
-    if (strategy === "random") {
-      return { action: "label" as const, expectedReward: 0, policyConfidence: 0.5, exploration: true };
+    if (dataMode === "live" && !current.liveLoaded) return null;
+    if (!policyMode) {
+      return {
+        action: "label" as const,
+        expectedReward: current.acquisitionScore ?? 0,
+        policyConfidence: current.confidence || 0.5,
+        exploration: strategy === "random",
+      };
     }
-    if (strategy === "entropy") {
-      const action = current.entropy > 0.5 ? ("label" as const) : ("predict" as const);
-      return { action, expectedReward: current.entropy - 0.5, policyConfidence: Math.abs(current.entropy - 0.5) + 0.5, exploration: false };
+    if (current.recommendedAction) {
+      return {
+        action: current.recommendedAction,
+        expectedReward: +(current.expectedReward ?? 0).toFixed(3),
+        policyConfidence: current.policyConfidence ?? 0.5,
+        exploration: false,
+      };
     }
     const utility = current.entropy + (1 - current.confidence) * 0.5;
     const action = utility > 0.55 ? ("label" as const) : ("predict" as const);
@@ -62,12 +80,22 @@ function AnnotationLab() {
       action,
       expectedReward: +(utility * rl.rewardScale).toFixed(3),
       policyConfidence: +Math.min(0.99, 0.55 + utility * 0.4).toFixed(3),
-      exploration: isExplore,
+      exploration: false,
     };
-  }, [current, strategy, rl]);
+  }, [current, dataMode, strategy, policyMode, rl]);
 
   useEffect(() => {
-    if (!running) return;
+    if (!experimentStarted || dataMode !== "live" || !loadingSamples || samples.length > 0) return;
+    void loadLiveSamples();
+  }, [experimentStarted, dataMode, loadingSamples, samples.length, loadLiveSamples]);
+
+  useEffect(() => {
+    if (!current || dataMode !== "live" || loadingSamples || loadingDecision || current.liveLoaded) return;
+    void loadSampleDecision(currentIndex);
+  }, [current, currentIndex, dataMode, loadingSamples, loadingDecision, loadSampleDecision]);
+
+  useEffect(() => {
+    if (!running || loadingSamples || loadingDecision) return;
     if (currentIndex >= samples.length) {
       setRunning(false);
       toast("Simulation complete", { description: `Used ${used}/${budget} budget across ${history.length} steps.` });
@@ -75,7 +103,7 @@ function AnnotationLab() {
     }
     const t = setTimeout(stepOnce, speedMs);
     return () => clearTimeout(t);
-  }, [running, currentIndex, samples.length, speedMs, stepOnce, setRunning, used, budget, history.length]);
+  }, [running, loadingSamples, loadingDecision, currentIndex, samples.length, speedMs, stepOnce, setRunning, used, budget, history.length]);
 
   if (!experimentStarted) {
     return <NotStarted onStart={startExperiment} />;
@@ -89,32 +117,62 @@ function AnnotationLab() {
             Live <span className="text-gradient">Simulation</span>
           </h1>
           <p className="mt-1 text-sm text-muted-foreground">
-            Watch the agent decide between requesting expert labels and predicting automatically.
+            Watch the selected strategy choose between requesting expert labels and predicting automatically.
           </p>
         </div>
         <div className="flex flex-wrap items-center gap-2">
+          {dataMode === "live" && (
+            <Badge variant="outline" className="border-success/40 text-success">
+              {loadingSamples ? <Loader2 className="mr-1 h-3 w-3 animate-spin" /> : null}
+              ML service
+            </Badge>
+          )}
           <Badge variant="outline" className="font-mono-num">step {history.length}/{samples.length}</Badge>
-          <Badge variant="outline" className="border-primary/40 text-primary uppercase">{strategy}</Badge>
+          <Badge variant="outline" className="border-primary/40 text-primary">{strategyInfo.label}</Badge>
           <Button variant="outline" size="sm" onClick={resetExperiment}>
             <RotateCcw className="mr-1 h-4 w-4" /> Reset
           </Button>
-          <Button variant="outline" size="sm" onClick={stepOnce} disabled={running || currentIndex >= samples.length}>
-            <StepForward className="mr-1 h-4 w-4" /> Step
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => void stepOnce()}
+            disabled={running || loadingSamples || loadingDecision || currentIndex >= samples.length}
+          >
+            {loadingDecision ? <Loader2 className="mr-1 h-4 w-4 animate-spin" /> : <StepForward className="mr-1 h-4 w-4" />} Step
           </Button>
           <Button
             size="sm"
             className="bg-gradient-primary text-primary-foreground shadow-elegant"
             onClick={() => setRunning(!running)}
-            disabled={currentIndex >= samples.length}
+            disabled={loadingSamples || loadingDecision || currentIndex >= samples.length}
           >
             {running ? <><Pause className="mr-1 h-4 w-4" /> Pause</> : <><Play className="mr-1 h-4 w-4" /> Auto-Run</>}
           </Button>
         </div>
       </div>
 
+      {(loadingSamples || liveError) && (
+        <div className="rounded-xl border border-border/60 bg-card/70 px-4 py-3 text-sm">
+          {loadingSamples ? (
+            <span className="inline-flex items-center gap-2 text-muted-foreground">
+              <Loader2 className="h-4 w-4 animate-spin" />
+              Loading dataset samples from the ML service.
+            </span>
+          ) : (
+            <span className="text-destructive">{liveError}</span>
+          )}
+        </div>
+      )}
+
       <div className="grid gap-6 lg:grid-cols-[1fr_1fr_1fr]">
         <ImageStream current={current} upcoming={upcoming} />
-        <DecisionEnginePanel sample={current} preview={preview} lastStep={lastStep} />
+        <DecisionEnginePanel
+          sample={current}
+          preview={preview}
+          lastStep={lastStep}
+          strategyLabel={strategyInfo.label}
+          showReward={policyMode}
+        />
         <div className="space-y-4">
           <div className="glass rounded-2xl p-5 space-y-4">
             <BudgetBar used={used} total={budget} />
@@ -124,7 +182,7 @@ function AnnotationLab() {
             </div>
             <Slider value={[speedMs]} min={120} max={1500} step={60} onValueChange={(v) => setSpeed(v[0])} />
           </div>
-          <BudgetTimeline history={history} />
+          <BudgetTimeline history={history} showReward={policyMode} />
         </div>
       </div>
     </motion.div>
