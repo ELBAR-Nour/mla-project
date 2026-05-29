@@ -45,7 +45,7 @@ const tooltipStyle = {
   fontSize: "12px",
 };
 
-type Key = "queries" | "f1" | "auc" | "efficiency";
+type Key = "queries" | "f1" | "auc" | "alc" | "efficiency";
 
 function StrategyArena() {
   const [sortKey, setSortKey] = useState<Key>("efficiency");
@@ -66,6 +66,7 @@ function StrategyArena() {
         queries: result.queries,
         f1: metric?.f1 ?? 0,
         auc: result.final_test_auc,
+        alc: result.alc,
         efficiency: metric?.efficiency ?? result.alc / Math.max(result.queries, 1),
       };
     });
@@ -136,10 +137,10 @@ function StrategyArena() {
               <TableHeader>
                 <TableRow>
                   <TableHead>Strategy</TableHead>
-                  {(["queries", "f1", "auc", "efficiency"] as Key[]).map((k) => (
+                  {(["queries", "f1", "auc", "alc", "efficiency"] as Key[]).map((k) => (
                     <TableHead key={k} className="text-right">
                       <Button variant="ghost" size="sm" onClick={() => sortBy(k)} className="h-7 capitalize">
-                        {k === "f1" ? "F1" : k} <ArrowUpDown className="ml-1 h-3 w-3" />
+                        {k === "f1" || k === "alc" ? k.toUpperCase() : k} <ArrowUpDown className="ml-1 h-3 w-3" />
                       </Button>
                     </TableHead>
                   ))}
@@ -158,6 +159,7 @@ function StrategyArena() {
                       <TableCell className="text-right font-mono-num">{row.queries}</TableCell>
                       <TableCell className="text-right font-mono-num">{row.f1.toFixed(3)}</TableCell>
                       <TableCell className="text-right font-mono-num">{row.auc.toFixed(3)}</TableCell>
+                      <TableCell className="text-right font-mono-num">{row.alc.toFixed(3)}</TableCell>
                       <TableCell className="text-right font-mono-num font-semibold text-success">
                         {row.efficiency.toFixed(6)}
                       </TableCell>

@@ -148,20 +148,33 @@ function InferenceWorkbench({ onEvaluationRefresh }: { onEvaluationRefresh?: () 
       setInference(prediction);
 
       if (checkpointName) {
-        const policy = await runRLDecision({
-          checkpoint_name: checkpointName,
-          model_name: modelName,
-          image_id: safeImageId,
-          dataset_name: dataset,
-          split: "train",
-          budget_remaining: budgetRemaining,
-          max_budget: 200,
-        });
-        setDecision(policy);
+        try {
+          const policy = await runRLDecision({
+            checkpoint_name: checkpointName,
+            model_name: modelName,
+            image_id: safeImageId,
+            dataset_name: dataset,
+            split: "train",
+            budget_remaining: budgetRemaining,
+            max_budget: 200,
+          });
+          setDecision(policy);
+        } catch (exc) {
+          const message = exc instanceof Error ? exc.message : "RL policy decision failed";
+          setDecision(null);
+          setError(message);
+          toast.warning("Classifier inference completed", { description: message });
+        }
       } else {
         setDecision(null);
       }
-      await onEvaluationRefresh?.();
+
+      try {
+        await onEvaluationRefresh?.();
+      } catch (exc) {
+        const message = exc instanceof Error ? exc.message : "Could not refresh model diagnostics";
+        toast.warning("Diagnostics refresh failed", { description: message });
+      }
 
       toast.success("Inference complete", {
         description: `${prediction.predicted_label_name} · ${(prediction.confidence * 100).toFixed(1)}% confidence`,

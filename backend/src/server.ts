@@ -38,12 +38,12 @@ app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ extended: true }));
 
 // Health check
-app.get('/health', (req, res) => {
+app.get('/health', async (req, res) => {
   res.json({
     status: 'healthy',
     timestamp: new Date().toISOString(),
     services: {
-      ml: mlService.isHealthy(),
+      ml: await mlService.isHealthy(),
       websocket: wsService.isHealthy()
     }
   });

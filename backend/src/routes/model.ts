@@ -13,10 +13,8 @@ export const modelRoutes = (mlService: MLService, wsService: WebSocketService) =
       res.json(artifacts);
     } catch (error: any) {
       console.error('Model artifact listing error:', error);
-      res.status(500).json({
-        error: 'Failed to list model artifacts',
-        details: error.message,
-      });
+      const response = mlService.formatError(error, 'Failed to list model artifacts');
+      res.status(response.status).json(response.body);
     }
   });
 
@@ -40,10 +38,8 @@ export const modelRoutes = (mlService: MLService, wsService: WebSocketService) =
       res.json(result);
     } catch (error: any) {
       console.error('Model loading error:', error);
-      res.status(500).json({
-        error: 'Failed to load model',
-        details: error.message,
-      });
+      const response = mlService.formatError(error, 'Failed to load model');
+      res.status(response.status).json(response.body);
     }
   });
 
@@ -71,10 +67,8 @@ export const modelRoutes = (mlService: MLService, wsService: WebSocketService) =
       res.json(result);
     } catch (error: any) {
       console.error('Model inference error:', error);
-      res.status(500).json({
-        error: 'Failed to run model inference',
-        details: error.message,
-      });
+      const response = mlService.formatError(error, 'Failed to run model inference');
+      res.status(response.status).json(response.body);
     }
   });
 
@@ -85,10 +79,8 @@ export const modelRoutes = (mlService: MLService, wsService: WebSocketService) =
       res.json(metrics);
     } catch (error: any) {
       console.error('Model metrics error:', error);
-      res.status(500).json({
-        error: 'Failed to get model metrics',
-        details: error.message,
-      });
+      const response = mlService.formatError(error, 'Failed to get model metrics');
+      res.status(response.status).json(response.body);
     }
   });
 
@@ -99,10 +91,8 @@ export const modelRoutes = (mlService: MLService, wsService: WebSocketService) =
       res.json(cm);
     } catch (error: any) {
       console.error('Confusion matrix error:', error);
-      res.status(500).json({
-        error: 'Failed to get confusion matrix',
-        details: error.message,
-      });
+      const response = mlService.formatError(error, 'Failed to get confusion matrix');
+      res.status(response.status).json(response.body);
     }
   });
 
@@ -113,10 +103,8 @@ export const modelRoutes = (mlService: MLService, wsService: WebSocketService) =
       res.json(roc);
     } catch (error: any) {
       console.error('ROC curve error:', error);
-      res.status(500).json({
-        error: 'Failed to get ROC curve',
-        details: error.message,
-      });
+      const response = mlService.formatError(error, 'Failed to get ROC curve');
+      res.status(response.status).json(response.body);
     }
   });
 

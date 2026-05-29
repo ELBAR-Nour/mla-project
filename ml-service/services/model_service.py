@@ -354,7 +354,10 @@ class ModelService:
             return {"fpr": [], "tpr": [], "thresholds": []}
         fpr, tpr, thresholds = roc_curve(self.latest_labels, self.latest_probs[:, 1])
         return {
-            "fpr": fpr.tolist(),
-            "tpr": tpr.tolist(),
-            "thresholds": thresholds.tolist()
+            "fpr": [float(value) for value in fpr],
+            "tpr": [float(value) for value in tpr],
+            "thresholds": [
+                float(value) if np.isfinite(value) else None
+                for value in thresholds
+            ],
         }

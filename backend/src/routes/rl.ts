@@ -13,10 +13,8 @@ export const rlRoutes = (mlService: MLService, wsService: WebSocketService) => {
       res.json(checkpoints);
     } catch (error: any) {
       console.error('RL checkpoint listing error:', error);
-      res.status(500).json({
-        error: 'Failed to list RL checkpoints',
-        details: error.message,
-      });
+      const response = mlService.formatError(error, 'Failed to list RL checkpoints');
+      res.status(response.status).json(response.body);
     }
   });
 
@@ -40,10 +38,8 @@ export const rlRoutes = (mlService: MLService, wsService: WebSocketService) => {
       res.json(result);
     } catch (error: any) {
       console.error('RL checkpoint loading error:', error);
-      res.status(500).json({
-        error: 'Failed to load RL checkpoint',
-        details: error.message,
-      });
+      const response = mlService.formatError(error, 'Failed to load RL checkpoint');
+      res.status(response.status).json(response.body);
     }
   });
 
@@ -73,10 +69,8 @@ export const rlRoutes = (mlService: MLService, wsService: WebSocketService) => {
       res.json(result);
     } catch (error: any) {
       console.error('RL decision error:', error);
-      res.status(500).json({
-        error: 'Failed to run RL decision',
-        details: error.message,
-      });
+      const response = mlService.formatError(error, 'Failed to run RL decision');
+      res.status(response.status).json(response.body);
     }
   });
 
@@ -87,10 +81,8 @@ export const rlRoutes = (mlService: MLService, wsService: WebSocketService) => {
       res.json(state);
     } catch (error: any) {
       console.error('RL state error:', error);
-      res.status(500).json({
-        error: 'Failed to get RL state',
-        details: error.message,
-      });
+      const response = mlService.formatError(error, 'Failed to get RL state');
+      res.status(response.status).json(response.body);
     }
   });
 
@@ -101,10 +93,8 @@ export const rlRoutes = (mlService: MLService, wsService: WebSocketService) => {
       res.json(policy);
     } catch (error: any) {
       console.error('RL policy error:', error);
-      res.status(500).json({
-        error: 'Failed to get RL policy',
-        details: error.message,
-      });
+      const response = mlService.formatError(error, 'Failed to get RL policy');
+      res.status(response.status).json(response.body);
     }
   });
 
@@ -132,10 +122,8 @@ export const rlRoutes = (mlService: MLService, wsService: WebSocketService) => {
       res.json(result);
     } catch (error: any) {
       console.error('RL training error:', error);
-      res.status(500).json({
-        error: 'Failed to train RL agent',
-        details: error.message,
-      });
+      const response = mlService.formatError(error, 'Failed to train RL agent');
+      res.status(response.status).json(response.body);
     }
   });
 
@@ -152,10 +140,8 @@ export const rlRoutes = (mlService: MLService, wsService: WebSocketService) => {
       res.json(result);
     } catch (error: any) {
       console.error('RL reset error:', error);
-      res.status(500).json({
-        error: 'Failed to reset RL agent',
-        details: error.message,
-      });
+      const response = mlService.formatError(error, 'Failed to reset RL agent');
+      res.status(response.status).json(response.body);
     }
   });
 

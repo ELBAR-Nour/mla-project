@@ -81,7 +81,7 @@ export interface ConfusionMatrixResponse {
 export interface ROCResponse {
   fpr: number[];
   tpr: number[];
-  thresholds: number[];
+  thresholds: Array<number | null>;
 }
 
 export interface ExperimentResult {

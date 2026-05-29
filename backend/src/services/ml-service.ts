@@ -96,6 +96,14 @@ export interface RLDecisionRequest {
   max_budget?: number;
 }
 
+export interface MLServiceErrorResponse {
+  status: number;
+  body: {
+    error: string;
+    details: string;
+  };
+}
+
 export class MLService {
   private client: AxiosInstance;
   private baseUrl: string;
@@ -122,6 +130,44 @@ export class MLService {
 
   getBaseUrl(): string {
     return this.baseUrl;
+  }
+
+  formatError(error: unknown, fallbackMessage: string): MLServiceErrorResponse {
+    if (!axios.isAxiosError(error)) {
+      return {
+        status: 500,
+        body: {
+          error: fallbackMessage,
+          details: error instanceof Error ? error.message : fallbackMessage,
+        },
+      };
+    }
+
+    if (!error.response) {
+      return {
+        status: 503,
+        body: {
+          error: 'ML service unavailable',
+          details: `Could not reach the ML service at ${this.baseUrl}. Start the ML service with "python main.py" from the ml-service directory, or set ML_SERVICE_URL to the running service.`,
+        },
+      };
+    }
+
+    const payload = error.response.data as any;
+    const details =
+      payload?.detail ??
+      payload?.details ??
+      payload?.error?.message ??
+      payload?.error ??
+      error.message;
+
+    return {
+      status: error.response.status >= 500 ? 502 : error.response.status,
+      body: {
+        error: fallbackMessage,
+        details: typeof details === 'string' ? details : JSON.stringify(details),
+      },
+    };
   }
 
   async isHealthy(): Promise<boolean> {
