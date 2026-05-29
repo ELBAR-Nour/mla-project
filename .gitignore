@@ -54,16 +54,7 @@ pytestdebug.log
 .ipynb_checkpoints/
 
 # ML artifacts
-ml-service/checkpoints/
-ml-service/models/
-ml-service/results/
-ml-service/figures/
-ml-service/experiments/
-ml-service/data/
-ml-service/*.pt
-ml-service/*.pth
-ml-service/*.npz
-ml-service/*.npy
+
 
 # Backend build outputs
 backend/dist/
