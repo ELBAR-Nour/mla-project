@@ -47,6 +47,18 @@ const tooltipStyle = {
 
 type Key = "queries" | "f1" | "auc" | "alc" | "efficiency";
 
+const dqnStrategyIds = new Set(["dqn", "double_dqn", "dueling_dqn"]);
+const dqnDefinitions = strategyDefinitions.filter((definition) => dqnStrategyIds.has(definition.id));
+const dqnCurveColors: Record<string, string> = {
+  dqn: "#dc2626",
+  double_dqn: "#2563eb",
+  dueling_dqn: "#16a34a",
+};
+
+function strategyStroke(id: string, index: number) {
+  return dqnCurveColors[id] ?? `var(--color-chart-${(index % 8) + 1})`;
+}
+
 function StrategyArena() {
   const [sortKey, setSortKey] = useState<Key>("efficiency");
   const [desc, setDesc] = useState(true);
@@ -62,6 +74,7 @@ function StrategyArena() {
       const id = strategyForNotebookName(result.strategy);
       const definition = strategyDefinitions.find((item) => item.id === id);
       return {
+        id,
         strategy: definition?.label ?? result.strategy,
         queries: result.queries,
         f1: metric?.f1 ?? 0,
@@ -84,6 +97,21 @@ function StrategyArena() {
     return [...rows.values()].sort((a, b) => a.queries - b.queries);
   }, [summary]);
 
+  const dqnAgentCurve = useMemo(() => {
+    if (!summary) return [];
+
+    const rows = new Map<number, Record<string, number>>();
+    for (const point of summary.learning_curves) {
+      const id = strategyForNotebookName(point.strategy);
+      if (!dqnStrategyIds.has(id)) continue;
+      const existing = rows.get(point.queries) ?? { queries: point.queries };
+      existing[id] = point.val_auc;
+      rows.set(point.queries, existing);
+    }
+
+    return [...rows.values()].sort((a, b) => a.queries - b.queries);
+  }, [summary]);
+
   const sorted = [...strategyTable].sort((a, b) => (desc ? b[sortKey] - a[sortKey] : a[sortKey] - b[sortKey]));
   const sortBy = (k: Key) => { if (k === sortKey) setDesc((d) => !d); else { setSortKey(k); setDesc(true); } };
   const leading = sorted[0];
@@ -96,7 +124,7 @@ function StrategyArena() {
             Strategy <span className="text-gradient">Arena</span>
           </h1>
           <p className="mt-1 text-sm text-muted-foreground">
-            Head-to-head race between sampling strategies. Efficiency = AUC ÷ queries used.
+            Head-to-head race between sampling strategies. Efficiency = validation AUC gain per annotation query.
           </p>
         </div>
         {leading && (
@@ -106,26 +134,34 @@ function StrategyArena() {
         )}
       </div>
 
-      <ChartContainer title="Race to High AUC" description="Animated AUC trajectory across query budget">
+      <ChartContainer title="Race to High AUC" description="Test AUC trajectory across the 200-query budget">
         <ResponsiveContainer width="100%" height={320}>
           <LineChart data={learningCurve} margin={{ left: -10, right: 8 }}>
             <CartesianGrid stroke="var(--border)" strokeDasharray="3 3" vertical={false} />
             <XAxis dataKey="queries" stroke="var(--muted-foreground)" fontSize={11} />
-            <YAxis stroke="var(--muted-foreground)" fontSize={11} domain={[0.5, 1]} />
+            <YAxis stroke="var(--muted-foreground)" fontSize={11} domain={[0.75, 1]} />
             <Tooltip contentStyle={tooltipStyle} />
             <Legend wrapperStyle={{ fontSize: 12 }} />
-            {strategyDefinitions.map((definition, index) => (
-              <Line
-                key={definition.id}
-                type="monotone"
-                dataKey={definition.id}
-                stroke={`var(--color-chart-${(index % 8) + 1})`}
-                strokeWidth={definition.kind === "rl" ? 3 : 2}
-                dot={definition.kind === "rl" ? { r: 2 } : false}
-                animationDuration={1400}
-                name={definition.label}
-              />
-            ))}
+            {strategyDefinitions.map((definition, index) => {
+              const hasCurve = learningCurve.some((row) => row[definition.id] !== undefined);
+              if (!hasCurve) return null;
+              const isRL = definition.kind === "rl";
+              return (
+                <Line
+                  key={definition.id}
+                  type="linear"
+                  dataKey={definition.id}
+                  stroke={strategyStroke(definition.id, index)}
+                  strokeWidth={isRL ? 5 : 2}
+                  strokeOpacity={isRL ? 1 : 0.45}
+                  dot={false}
+                  activeDot={{ r: isRL ? 6 : 4 }}
+                  connectNulls
+                  isAnimationActive={false}
+                  name={definition.label}
+                />
+              );
+            })}
           </LineChart>
         </ResponsiveContainer>
       </ChartContainer>
@@ -170,7 +206,7 @@ function StrategyArena() {
         </div>
       </ChartContainer>
 
-      <ChartContainer title="Final Performance" description="AUC and efficiency by strategy">
+      <ChartContainer title="Final Performance" description="Final test AUC and annotation efficiency by strategy">
         <ResponsiveContainer width="100%" height={300}>
           <BarChart data={strategyTable} margin={{ left: -10, right: 8 }}>
             <CartesianGrid stroke="var(--border)" strokeDasharray="3 3" vertical={false} />

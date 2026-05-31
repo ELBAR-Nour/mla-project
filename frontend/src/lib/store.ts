@@ -238,11 +238,20 @@ function pickAction(
   }
 
   if (s.recommendedAction) {
+    const exploration = rng() < rl.epsilon;
+    const action: Action = exploration
+      ? rng() > 0.5
+        ? "label"
+        : "predict"
+      : s.recommendedAction;
+
     return {
-      action: s.recommendedAction,
+      action,
       expectedReward: s.expectedReward ?? 0,
-      policyConfidence: s.policyConfidence ?? 0.5,
-      exploration: false,
+      policyConfidence: exploration
+        ? +Math.max(0.5, (s.policyConfidence ?? 0.5) * 0.75).toFixed(3)
+        : s.policyConfidence ?? 0.5,
+      exploration,
     };
   }
 
