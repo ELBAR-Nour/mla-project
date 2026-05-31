@@ -38,7 +38,6 @@ export const rocCurve = Array.from({ length: 21 }, (_, i) => {
 export const trainingCurves = Array.from({ length: 30 }, (_, i) => ({
   epoch: i + 1,
   loss: +(1.4 * Math.exp(-i / 8) + 0.12 + rng() * 0.04).toFixed(3),
-  accuracy: +(0.55 + 0.4 * (1 - Math.exp(-i / 6)) + rng() * 0.01).toFixed(3),
 }));
 
 export const entropyHistogram = Array.from({ length: 12 }, (_, i) => ({
@@ -53,9 +52,9 @@ export const confusionMatrix = [
 ];
 
 export const strategyTable = [
-  { strategy: "Random Sampling", queries: 320, accuracy: 0.842, auc: 0.871, efficiency: 0.272 },
-  { strategy: "Entropy Sampling", queries: 240, accuracy: 0.881, auc: 0.912, efficiency: 0.380 },
-  { strategy: "RL Agent", queries: 184, accuracy: 0.913, auc: 0.946, efficiency: 0.514 },
+  { strategy: "Random Sampling", queries: 320, auc: 0.871, efficiency: 0.272 },
+  { strategy: "Entropy Sampling", queries: 240, auc: 0.912, efficiency: 0.380 },
+  { strategy: "RL Agent", queries: 184, auc: 0.946, efficiency: 0.514 },
 ];
 
 export const samplePrediction = {

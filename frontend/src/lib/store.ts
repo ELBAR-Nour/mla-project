@@ -44,7 +44,6 @@ export interface StepRecord {
   entropy: number;
   confidence: number;
   auc: number;
-  accuracy: number;
   policyConfidence: number;
   expectedReward: number;
   exploration: boolean;
@@ -514,9 +513,6 @@ export const useApp = create<AppState>((set, get) => ({
       }
     }
 
-    const correctSoFar =
-      st.history.reduce((a, h) => a + (h.correct ? 1 : 0), 0) + (correct ? 1 : 0);
-    const accuracy = correctSoFar / (st.history.length + 1);
     // AUC saturates with labels acquired
     const labelsCount = budgetUsed;
     const auc = +Math.min(0.97, 0.62 + 0.34 * (1 - Math.exp(-labelsCount / 18))).toFixed(3);
@@ -530,7 +526,6 @@ export const useApp = create<AppState>((set, get) => ({
       entropy: sample.entropy,
       confidence: sample.confidence,
       auc,
-      accuracy: +accuracy.toFixed(3),
       policyConfidence: decision.policyConfidence,
       expectedReward: decision.expectedReward,
       exploration: decision.exploration,

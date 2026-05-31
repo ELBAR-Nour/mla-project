@@ -11,7 +11,7 @@ import {
   XAxis,
   YAxis,
 } from "recharts";
-import { Activity, Coins, Gauge, Target, Play, FlaskConical } from "lucide-react";
+import { Activity, Coins, Gauge, Play, FlaskConical } from "lucide-react";
 import { MetricCard } from "@/components/metric-card";
 import { ChartContainer } from "@/components/chart-container";
 import { BudgetBar } from "@/components/budget-bar";
@@ -39,7 +39,7 @@ const tooltipStyle = {
 };
 
 function Dashboard() {
-  const { visibleStrategies, toggleStrategy, budget, budgetUsed, remaining, history, experimentStarted, strategy } = useApp();
+  const { visibleStrategies, toggleStrategy, budget, budgetUsed, remaining, history, strategy } = useApp();
   const [summary, setSummary] = useState<ExperimentSummary | null>(null);
   useEffect(() => {
     void getExperimentSummary().then(setSummary).catch(() => setSummary(null));
@@ -64,7 +64,6 @@ function Dashboard() {
   const used = budgetUsed();
   const budgetRemaining = remaining();
   const last = history[history.length - 1];
-  const accuracy = last ? `${(last.accuracy * 100).toFixed(1)}%` : "—";
   const auc = last ? last.auc.toFixed(3) : "—";
 
   return (
@@ -90,8 +89,7 @@ function Dashboard() {
         </div>
       </div>
 
-      <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
-        <MetricCard label="Accuracy" value={last ? accuracy : selectedResult ? `${(selectedResult.final_test_auc * 100).toFixed(1)}%` : "N/A"} hint={experimentStarted ? "live" : "notebook test"} tone="success" icon={<Target className="h-5 w-5" />} />
+      <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
         <MetricCard label="AUC Score" value={last ? auc : selectedResult ? selectedResult.final_test_auc.toFixed(3) : "N/A"} hint={last ? "latest step" : "notebook test"} icon={<Gauge className="h-5 w-5" />} />
         <MetricCard label="Remaining Budget" value={`${budgetRemaining}`} hint={`of ${budget} queries`} tone="warning" icon={<Coins className="h-5 w-5" />} />
         <MetricCard label="Queries Used" value={`${used}`} hint="this run" icon={<Activity className="h-5 w-5" />} />

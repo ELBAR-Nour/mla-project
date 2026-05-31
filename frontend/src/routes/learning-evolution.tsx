@@ -15,7 +15,7 @@ import {
   XAxis,
   YAxis,
 } from "recharts";
-import { Brain, Compass, Target, TrendingUp } from "lucide-react";
+import { Brain, Compass, TrendingUp } from "lucide-react";
 import { ChartContainer } from "@/components/chart-container";
 import { MetricCard } from "@/components/metric-card";
 import { useApp } from "@/lib/store";
@@ -25,7 +25,7 @@ export const Route = createFileRoute("/learning-evolution")({
   head: () => ({
     meta: [
       { title: "Learning Evolution — MedAL" },
-      { name: "description", content: "Watch strategy-specific AUC, accuracy, query usage, and policy metrics evolve over time." },
+      { name: "description", content: "Watch strategy-specific AUC, query usage, and policy metrics evolve over time." },
     ],
   }),
   component: LearningEvolution,
@@ -91,9 +91,8 @@ function LearningEvolution() {
         </p>
       </div>
 
-      <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+      <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
         <MetricCard label="AUC" value={last.auc.toFixed(3)} hint="latest" icon={<TrendingUp className="h-5 w-5" />} />
-        <MetricCard label="Accuracy" value={`${(last.accuracy * 100).toFixed(1)}%`} hint={`${history.length} steps`} tone="success" icon={<Target className="h-5 w-5" />} />
         {policyMode ? (
           <>
             <MetricCard label="Cumulative Reward" value={totalReward.toFixed(2)} hint="RL reward signal" tone={totalReward >= 0 ? "success" : "danger"} icon={<Brain className="h-5 w-5" />} />
@@ -108,7 +107,7 @@ function LearningEvolution() {
       </div>
 
       <div className="grid gap-4 lg:grid-cols-3">
-        <ChartContainer className="lg:col-span-2" title="AUC & Accuracy Over Time" description="Performance per simulation step">
+        <ChartContainer className="lg:col-span-2" title="AUC Over Time" description="Model quality per simulation step">
           <ResponsiveContainer width="100%" height={300}>
             <AreaChart data={history} margin={{ left: -10, right: 8, top: 8 }}>
               <defs>
@@ -123,7 +122,6 @@ function LearningEvolution() {
               <Tooltip contentStyle={tooltipStyle} />
               <Legend wrapperStyle={{ fontSize: 12 }} />
               <Area type="monotone" dataKey="auc" stroke="var(--color-chart-1)" strokeWidth={3} fill="url(#evo-auc)" name="AUC" />
-              <Line type="monotone" dataKey="accuracy" stroke="var(--color-chart-2)" strokeWidth={2} dot={false} name="Accuracy" />
             </AreaChart>
           </ResponsiveContainer>
         </ChartContainer>

@@ -13,7 +13,7 @@ import {
   YAxis,
   Legend,
 } from "recharts";
-import { ArrowUpDown, Sparkles, Trophy } from "lucide-react";
+import { ArrowUpDown, Trophy } from "lucide-react";
 import { ChartContainer } from "@/components/chart-container";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -130,63 +130,45 @@ function StrategyArena() {
         </ResponsiveContainer>
       </ChartContainer>
 
-      <div className="grid gap-4 lg:grid-cols-3">
-        <ChartContainer className="lg:col-span-2" title="Performance Table" description="Click columns to sort">
-          <div className="overflow-x-auto">
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead>Strategy</TableHead>
-                  {(["queries", "f1", "auc", "alc", "efficiency"] as Key[]).map((k) => (
-                    <TableHead key={k} className="text-right">
-                      <Button variant="ghost" size="sm" onClick={() => sortBy(k)} className="h-7 capitalize">
-                        {k === "f1" || k === "alc" ? k.toUpperCase() : k} <ArrowUpDown className="ml-1 h-3 w-3" />
-                      </Button>
-                    </TableHead>
-                  ))}
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {sorted.map((row) => {
-                  const isRL = row.strategy.includes("DQN");
-                  const isLeading = row.strategy === leading?.strategy;
-                  return (
-                    <TableRow key={row.strategy} className={isRL ? "bg-primary/5" : ""}>
-                      <TableCell className="font-medium">
-                        {row.strategy}
-                        {isLeading && <Badge className="ml-2 bg-gradient-primary text-primary-foreground">Top</Badge>}
-                      </TableCell>
-                      <TableCell className="text-right font-mono-num">{row.queries}</TableCell>
-                      <TableCell className="text-right font-mono-num">{row.f1.toFixed(3)}</TableCell>
-                      <TableCell className="text-right font-mono-num">{row.auc.toFixed(3)}</TableCell>
-                      <TableCell className="text-right font-mono-num">{row.alc.toFixed(3)}</TableCell>
-                      <TableCell className="text-right font-mono-num font-semibold text-success">
-                        {row.efficiency.toFixed(6)}
-                      </TableCell>
-                    </TableRow>
-                  );
-                })}
-              </TableBody>
-            </Table>
-          </div>
-        </ChartContainer>
-
-        <ChartContainer title="Insights" description="Auto-generated from the run">
-          <ul className="space-y-3 text-sm">
-            {[
-              "All rows come from the exported notebook experiment summary.",
-              "DQN-family policies are compared alongside Random, Margin, Entropy, BALD, and BADGE.",
-              "The curve uses test AUC from the long learning-curve CSV.",
-              "Efficiency is read from the notebook clinical metrics export.",
-            ].map((t) => (
-              <li key={t} className="flex gap-2 rounded-xl border border-border/60 bg-card/50 p-3">
-                <Sparkles className="mt-0.5 h-4 w-4 shrink-0 text-primary" />
-                <span>{t}</span>
-              </li>
-            ))}
-          </ul>
-        </ChartContainer>
-      </div>
+      <ChartContainer title="Performance Table" description="Click columns to sort">
+        <div className="overflow-x-auto">
+          <Table>
+            <TableHeader>
+              <TableRow>
+                <TableHead>Strategy</TableHead>
+                {(["queries", "f1", "auc", "alc", "efficiency"] as Key[]).map((k) => (
+                  <TableHead key={k} className="text-right">
+                    <Button variant="ghost" size="sm" onClick={() => sortBy(k)} className="h-7 capitalize">
+                      {k === "f1" || k === "alc" ? k.toUpperCase() : k} <ArrowUpDown className="ml-1 h-3 w-3" />
+                    </Button>
+                  </TableHead>
+                ))}
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {sorted.map((row) => {
+                const isRL = row.strategy.includes("DQN");
+                const isLeading = row.strategy === leading?.strategy;
+                return (
+                  <TableRow key={row.strategy} className={isRL ? "bg-primary/5" : ""}>
+                    <TableCell className="font-medium">
+                      {row.strategy}
+                      {isLeading && <Badge className="ml-2 bg-gradient-primary text-primary-foreground">Top</Badge>}
+                    </TableCell>
+                    <TableCell className="text-right font-mono-num">{row.queries}</TableCell>
+                    <TableCell className="text-right font-mono-num">{row.f1.toFixed(3)}</TableCell>
+                    <TableCell className="text-right font-mono-num">{row.auc.toFixed(3)}</TableCell>
+                    <TableCell className="text-right font-mono-num">{row.alc.toFixed(3)}</TableCell>
+                    <TableCell className="text-right font-mono-num font-semibold text-success">
+                      {row.efficiency.toFixed(6)}
+                    </TableCell>
+                  </TableRow>
+                );
+              })}
+            </TableBody>
+          </Table>
+        </div>
+      </ChartContainer>
 
       <ChartContainer title="Final Performance" description="AUC and efficiency by strategy">
         <ResponsiveContainer width="100%" height={300}>
