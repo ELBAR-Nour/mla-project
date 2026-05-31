@@ -75,7 +75,7 @@ export const datasetRoutes = (mlService: MLService, wsService: WebSocketService)
 
   // Get batch of samples
   router.get('/batch', [
-    query('count').optional().isInt({ min: 1, max: 100 }),
+    query('count').optional().isInt({ min: 1, max: 200 }),
   ], async (req: express.Request, res: express.Response) => {
     try {
       const errors = validationResult(req);

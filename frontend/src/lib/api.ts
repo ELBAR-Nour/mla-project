@@ -73,15 +73,34 @@ export interface RLDecisionResult {
   prediction: InferenceResult;
 }
 
+export interface AnnotationResult {
+  image_id: number;
+  action: string;
+  reward: number;
+  cost: number;
+  predicted_label: number;
+  true_label: number;
+  confidence: number;
+  uncertainty: number;
+  correct: boolean;
+  budget_used: number;
+  budget_remaining: number;
+}
+
 export interface ConfusionMatrixResponse {
   matrix: number[][];
   labels: Array<string | number>;
+  model_name?: string | null;
+  dataset_name?: string;
+  metrics?: Record<string, number>;
 }
 
 export interface ROCResponse {
   fpr: number[];
   tpr: number[];
   thresholds: Array<number | null>;
+  model_name?: string | null;
+  dataset_name?: string;
 }
 
 export interface ExperimentResult {
@@ -194,12 +213,39 @@ export function runModelInference(input: {
   });
 }
 
-export function getConfusionMatrix() {
-  return apiRequest<ConfusionMatrixResponse>("/model/confusion-matrix");
+function withQuery(path: string, params?: Record<string, string | undefined>) {
+  const search = new URLSearchParams();
+  Object.entries(params ?? {}).forEach(([key, value]) => {
+    if (value) search.set(key, value);
+  });
+  const query = search.toString();
+  return query ? `${path}?${query}` : path;
 }
 
-export function getROCCurve() {
-  return apiRequest<ROCResponse>("/model/roc");
+export function getConfusionMatrix(input?: {
+  model_name?: string;
+  dataset_name?: string;
+}) {
+  return apiRequest<ConfusionMatrixResponse>(withQuery("/model/confusion-matrix", input));
+}
+
+export function getROCCurve(input?: {
+  model_name?: string;
+  dataset_name?: string;
+}) {
+  return apiRequest<ROCResponse>(withQuery("/model/roc", input));
+}
+
+export function processAnnotation(input: {
+  image_id: number;
+  action: "predict" | "request_label";
+  budget_remaining: number;
+  max_budget?: number;
+}) {
+  return apiRequest<AnnotationResult>("/annotation", {
+    method: "POST",
+    body: JSON.stringify(input),
+  });
 }
 
 export function runRLDecision(input: {

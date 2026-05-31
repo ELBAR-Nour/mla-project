@@ -347,7 +347,8 @@ class ModelService:
         if self.latest_probs is None or self.latest_labels is None:
             return np.zeros((self.n_classes or 2, self.n_classes or 2))
         preds = self.latest_probs.argmax(axis=1)
-        return confusion_matrix(self.latest_labels, preds)
+        labels = list(range(self.n_classes or 2))
+        return confusion_matrix(self.latest_labels, preds, labels=labels)
 
     def get_roc_curve(self):
         if self.latest_probs is None or self.latest_labels is None or self.n_classes != 2:

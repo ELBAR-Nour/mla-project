@@ -2,8 +2,6 @@ import { createFileRoute, Link } from "@tanstack/react-router";
 import { useEffect, useMemo, useState } from "react";
 import { motion } from "framer-motion";
 import {
-  Area,
-  AreaChart,
   CartesianGrid,
   Legend,
   Line,
@@ -41,7 +39,7 @@ const tooltipStyle = {
 };
 
 function Dashboard() {
-  const { visibleStrategies, toggleStrategy, budget, history, experimentStarted, strategy } = useApp();
+  const { visibleStrategies, toggleStrategy, budget, budgetUsed, remaining, history, experimentStarted, strategy } = useApp();
   const [summary, setSummary] = useState<ExperimentSummary | null>(null);
   useEffect(() => {
     void getExperimentSummary().then(setSummary).catch(() => setSummary(null));
@@ -63,7 +61,8 @@ function Dashboard() {
   const selectedResult = summary?.main_results.find(
     (row) => row.strategy.toLowerCase() === selectedNotebookName.toLowerCase(),
   );
-  const used = history.filter((h) => h.action === "label").length;
+  const used = budgetUsed();
+  const budgetRemaining = remaining();
   const last = history[history.length - 1];
   const accuracy = last ? `${(last.accuracy * 100).toFixed(1)}%` : "—";
   const auc = last ? last.auc.toFixed(3) : "—";
@@ -94,7 +93,7 @@ function Dashboard() {
       <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
         <MetricCard label="Accuracy" value={last ? accuracy : selectedResult ? `${(selectedResult.final_test_auc * 100).toFixed(1)}%` : "N/A"} hint={experimentStarted ? "live" : "notebook test"} tone="success" icon={<Target className="h-5 w-5" />} />
         <MetricCard label="AUC Score" value={last ? auc : selectedResult ? selectedResult.final_test_auc.toFixed(3) : "N/A"} hint={last ? "latest step" : "notebook test"} icon={<Gauge className="h-5 w-5" />} />
-        <MetricCard label="Remaining Budget" value={`${budget - used}`} hint={`of ${budget} queries`} tone="warning" icon={<Coins className="h-5 w-5" />} />
+        <MetricCard label="Remaining Budget" value={`${budgetRemaining}`} hint={`of ${budget} queries`} tone="warning" icon={<Coins className="h-5 w-5" />} />
         <MetricCard label="Queries Used" value={`${used}`} hint="this run" icon={<Activity className="h-5 w-5" />} />
       </div>
 
@@ -117,7 +116,7 @@ function Dashboard() {
                 >
                   <span
                     className="h-2 w-2 rounded-full"
-                    style={{ background: `var(--color-chart-${(strategyDefinitions.findIndex((item) => item.id === s) % 5) + 1})` }}
+                    style={{ background: `var(--color-chart-${(strategyDefinitions.findIndex((item) => item.id === s) % 8) + 1})` }}
                   />
                   {definition.shortLabel}
                 </Toggle>
@@ -126,28 +125,28 @@ function Dashboard() {
           }
         >
           <ResponsiveContainer width="100%" height={320}>
-            <AreaChart data={curveData} margin={{ left: -10, right: 8, top: 8 }}>
-              <defs>
-                <linearGradient id="grad-rl" x1="0" y1="0" x2="0" y2="1">
-                  <stop offset="0%" stopColor="var(--color-chart-1)" stopOpacity={0.4} />
-                  <stop offset="100%" stopColor="var(--color-chart-1)" stopOpacity={0} />
-                </linearGradient>
-              </defs>
+            <LineChart data={curveData} margin={{ left: -10, right: 8, top: 8 }}>
               <CartesianGrid stroke="var(--border)" strokeDasharray="3 3" vertical={false} />
               <XAxis dataKey="queries" stroke="var(--muted-foreground)" fontSize={11} tickLine={false} axisLine={false} />
               <YAxis stroke="var(--muted-foreground)" fontSize={11} tickLine={false} axisLine={false} domain={[0.5, 1]} />
               <Tooltip contentStyle={tooltipStyle} />
               {strategyDefinitions.map((definition, index) => {
-                const color = `var(--color-chart-${(index % 5) + 1})`;
+                const color = `var(--color-chart-${(index % 8) + 1})`;
                 if (!visibleStrategies[definition.id]) return null;
-                return definition.kind === "rl" ? (
-                  <Area key={definition.id} type="monotone" dataKey={definition.id} stroke={color} strokeWidth={3} fill="url(#grad-rl)" name={definition.label} />
-                ) : (
-                  <Line key={definition.id} type="monotone" dataKey={definition.id} stroke={color} strokeWidth={2} dot={false} name={definition.label} />
+                return (
+                  <Line
+                    key={definition.id}
+                    type="monotone"
+                    dataKey={definition.id}
+                    stroke={color}
+                    strokeWidth={definition.kind === "rl" ? 3 : 2}
+                    dot={definition.kind === "rl" ? { r: 2 } : false}
+                    name={definition.label}
+                  />
                 );
               })}
               <Legend iconType="circle" wrapperStyle={{ fontSize: 12 }} />
-            </AreaChart>
+            </LineChart>
           </ResponsiveContainer>
         </ChartContainer>
 
@@ -156,7 +155,7 @@ function Dashboard() {
             <BudgetBar used={used} total={budget} />
             <div className="mt-4 grid grid-cols-3 gap-2 text-center text-xs">
               <div className="rounded-lg bg-success/10 p-2 text-success">
-                <div className="font-mono-num text-base font-semibold">{budget - used}</div>
+                <div className="font-mono-num text-base font-semibold">{budgetRemaining}</div>
                 <div>Left</div>
               </div>
               <div className="rounded-lg bg-warning/10 p-2 text-warning">

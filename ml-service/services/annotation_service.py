@@ -122,8 +122,18 @@ class AnnotationService:
         self._ensure_env()
         return self.env.step(action)
 
-    async def process_annotation(self, image_id: int, action: str, budget_remaining: int):
+    async def process_annotation(self, image_id: int, action: str, budget_remaining: int, max_budget: int = 200):
         self._ensure_env()
+        requested_max = int(max(1, max_budget))
+        if requested_max != self.env.max_budget:
+            self.env.max_budget = requested_max
+            self.env.budget_remaining = requested_max
+        requested_remaining = int(max(0, min(budget_remaining, requested_max)))
+        if requested_remaining == requested_max and self.env.budget_remaining != requested_max:
+            self.env.reset()
+            self.env.max_budget = requested_max
+        self.env.budget_remaining = requested_remaining
+
         action_val = 1 if action == "request_label" else 0
         
         # Override the env sample idx to match user input

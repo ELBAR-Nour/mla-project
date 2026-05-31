@@ -42,6 +42,7 @@ import {
   type ROCResponse,
   type RLDecisionResult,
 } from "@/lib/api";
+import { MAX_ANNOTATION_BUDGET } from "@/lib/constants";
 import { strategyDefinitions, strategyForNotebookName } from "@/lib/strategies";
 import { toast } from "sonner";
 
@@ -64,6 +65,11 @@ const tooltipStyle = {
 
 const datasets = ["PneumoniaMNIST", "BreastMNIST"] as const;
 
+type EvaluationContext = {
+  modelName?: string;
+  datasetName?: string;
+};
+
 function artifactLabel(artifact: ModelArtifact) {
   const detail = artifact.strategy ?? artifact.source ?? artifact.architecture ?? "artifact";
   return `${artifact.name} · ${detail}`;
@@ -84,13 +90,13 @@ function pickCheckpoint(artifacts: ModelArtifact[]) {
   );
 }
 
-function InferenceWorkbench({ onEvaluationRefresh }: { onEvaluationRefresh?: () => Promise<void> }) {
+function InferenceWorkbench({ onEvaluationRefresh }: { onEvaluationRefresh?: (context: EvaluationContext) => Promise<void> }) {
   const [artifacts, setArtifacts] = useState<ModelArtifactsResponse | null>(null);
   const [modelName, setModelName] = useState("");
   const [checkpointName, setCheckpointName] = useState("");
   const [dataset, setDataset] = useState<(typeof datasets)[number]>("PneumoniaMNIST");
   const [imageId, setImageId] = useState(0);
-  const [budgetRemaining, setBudgetRemaining] = useState(120);
+  const [budgetRemaining, setBudgetRemaining] = useState(MAX_ANNOTATION_BUDGET);
   const [loadingArtifacts, setLoadingArtifacts] = useState(false);
   const [running, setRunning] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -156,7 +162,7 @@ function InferenceWorkbench({ onEvaluationRefresh }: { onEvaluationRefresh?: () 
             dataset_name: dataset,
             split: "train",
             budget_remaining: budgetRemaining,
-            max_budget: 200,
+            max_budget: MAX_ANNOTATION_BUDGET,
           });
           setDecision(policy);
         } catch (exc) {
@@ -170,7 +176,7 @@ function InferenceWorkbench({ onEvaluationRefresh }: { onEvaluationRefresh?: () 
       }
 
       try {
-        await onEvaluationRefresh?.();
+        await onEvaluationRefresh?.({ modelName, datasetName: dataset });
       } catch (exc) {
         const message = exc instanceof Error ? exc.message : "Could not refresh model diagnostics";
         toast.warning("Diagnostics refresh failed", { description: message });
@@ -257,7 +263,7 @@ function InferenceWorkbench({ onEvaluationRefresh }: { onEvaluationRefresh?: () 
               <Input
                 type="number"
                 min={0}
-                max={200}
+                max={MAX_ANNOTATION_BUDGET}
                 value={budgetRemaining}
                 onChange={(event) => setBudgetRemaining(Number(event.target.value))}
               />
@@ -455,12 +461,18 @@ function ModelInsights() {
   const [confusion, setConfusion] = useState<ConfusionMatrixResponse | null>(null);
   const [roc, setRoc] = useState<ROCResponse | null>(null);
   const [summary, setSummary] = useState<ExperimentSummary | null>(null);
+  const [evaluationContext, setEvaluationContext] = useState<EvaluationContext>({});
 
-  const refreshEvaluation = useCallback(async () => {
+  const refreshEvaluation = useCallback(async (context?: EvaluationContext) => {
+    const request = {
+      model_name: context?.modelName,
+      dataset_name: context?.datasetName,
+    };
     const [nextConfusion, nextRoc] = await Promise.all([
-      getConfusionMatrix(),
-      getROCCurve(),
+      getConfusionMatrix(request),
+      getROCCurve(request),
     ]);
+    setEvaluationContext(context ?? {});
     setConfusion(nextConfusion);
     setRoc(nextRoc);
   }, []);
@@ -522,7 +534,14 @@ function ModelInsights() {
       <div className="grid gap-4 lg:grid-cols-2">
         <InferenceWorkbench onEvaluationRefresh={refreshEvaluation} />
 
-        <ChartContainer title="Confusion Matrix" description="True vs predicted on hold-out set">
+        <ChartContainer
+          title="Confusion Matrix"
+          description={
+            confusion?.model_name
+              ? `${confusion.model_name} on ${confusion.dataset_name ?? evaluationContext.datasetName ?? "hold-out"}`
+              : "True vs predicted on hold-out set"
+          }
+        >
           <ConfusionHeatmap data={confusion} />
         </ChartContainer>
 
@@ -547,7 +566,7 @@ function ModelInsights() {
               <YAxis stroke="var(--muted-foreground)" fontSize={11} />
               <Tooltip contentStyle={tooltipStyle} />
               {strategyDefinitions.map((definition, index) => (
-                <Line key={definition.id} type="monotone" dataKey={`${definition.id}_val`} stroke={`var(--color-chart-${(index % 5) + 1})`} strokeWidth={definition.kind === "rl" ? 3 : 2} dot={false} name={definition.label} />
+                <Line key={definition.id} type="monotone" dataKey={`${definition.id}_val`} stroke={`var(--color-chart-${(index % 8) + 1})`} strokeWidth={definition.kind === "rl" ? 3 : 2} dot={false} name={definition.label} />
               ))}
             </LineChart>
           </ResponsiveContainer>
@@ -561,7 +580,7 @@ function ModelInsights() {
               <YAxis stroke="var(--muted-foreground)" fontSize={11} domain={[0.75, 1]} />
               <Tooltip contentStyle={tooltipStyle} />
               {strategyDefinitions.map((definition, index) => (
-                <Line key={definition.id} type="monotone" dataKey={`${definition.id}_test`} stroke={`var(--color-chart-${(index % 5) + 1})`} strokeWidth={definition.kind === "rl" ? 3 : 2} dot={false} name={definition.label} />
+                <Line key={definition.id} type="monotone" dataKey={`${definition.id}_test`} stroke={`var(--color-chart-${(index % 8) + 1})`} strokeWidth={definition.kind === "rl" ? 3 : 2} dot={false} name={definition.label} />
               ))}
             </LineChart>
           </ResponsiveContainer>

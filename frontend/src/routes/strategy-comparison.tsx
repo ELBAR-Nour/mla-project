@@ -119,7 +119,7 @@ function StrategyArena() {
                 key={definition.id}
                 type="monotone"
                 dataKey={definition.id}
-                stroke={`var(--color-chart-${(index % 5) + 1})`}
+                stroke={`var(--color-chart-${(index % 8) + 1})`}
                 strokeWidth={definition.kind === "rl" ? 3 : 2}
                 dot={definition.kind === "rl" ? { r: 2 } : false}
                 animationDuration={1400}

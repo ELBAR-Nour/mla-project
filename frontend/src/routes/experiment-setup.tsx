@@ -14,6 +14,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { useApp } from "@/lib/store";
+import { MAX_ANNOTATION_BUDGET } from "@/lib/constants";
 import { isRLStrategy, strategyDefinitions } from "@/lib/strategies";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
@@ -84,9 +85,9 @@ function ExperimentSetup() {
               <Label>Budget</Label>
               <span className="font-mono-num text-2xl font-semibold text-gradient">{budget}</span>
             </div>
-            <Slider value={[budget]} min={10} max={80} step={5} onValueChange={(v) => setBudget(v[0])} />
+            <Slider value={[budget]} min={10} max={MAX_ANNOTATION_BUDGET} step={5} onValueChange={(v) => setBudget(v[0])} />
             <div className="flex justify-between text-xs text-muted-foreground font-mono-num">
-              <span>10</span><span>80</span>
+              <span>10</span><span>{MAX_ANNOTATION_BUDGET}</span>
             </div>
           </div>
         </ChartContainer>

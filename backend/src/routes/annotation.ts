@@ -11,6 +11,7 @@ export const annotationRoutes = (mlService: MLService, wsService: WebSocketServi
     body('image_id').isInt({ min: 0 }),
     body('action').isIn(['predict', 'request_label']),
     body('budget_remaining').isInt({ min: 0 }),
+    body('max_budget').optional().isInt({ min: 1, max: 200 }),
   ], async (req: express.Request, res: express.Response) => {
     try {
       const errors = validationResult(req);
@@ -18,9 +19,9 @@ export const annotationRoutes = (mlService: MLService, wsService: WebSocketServi
         return res.status(400).json({ errors: errors.array() });
       }
 
-      const { image_id, action, budget_remaining } = req.body;
+      const { image_id, action, budget_remaining, max_budget } = req.body;
 
-      const result = await mlService.processAnnotation(image_id, action, budget_remaining);
+      const result = await mlService.processAnnotation(image_id, action, budget_remaining, max_budget);
 
       // Broadcast annotation result
       wsService.broadcast('annotation', {

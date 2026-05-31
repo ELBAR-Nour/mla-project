@@ -12,9 +12,8 @@ import {
 import { useApp } from "@/lib/store";
 
 export function TopBar() {
-  const { dataset, setDataset, theme, toggleTheme, budget, history } = useApp();
-  const used = history.filter((h) => h.action === "label").length;
-  const remaining = budget - used;
+  const { dataset, setDataset, theme, toggleTheme, budget, remaining } = useApp();
+  const budgetRemaining = remaining();
   return (
     <header className="sticky top-0 z-30 flex h-14 items-center gap-3 border-b border-border/60 glass-strong px-3 md:px-5">
       <SidebarTrigger />
@@ -36,7 +35,7 @@ export function TopBar() {
           Live
         </Badge>
         <Badge variant="outline" className="font-mono-num">
-          Budget {remaining}/{budget}
+          Budget {budgetRemaining}/{budget}
         </Badge>
         <Button variant="ghost" size="icon" onClick={toggleTheme} aria-label="Toggle theme">
           {theme === "light" ? <Moon className="h-4 w-4" /> : <Sun className="h-4 w-4" />}

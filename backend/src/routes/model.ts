@@ -87,7 +87,10 @@ export const modelRoutes = (mlService: MLService, wsService: WebSocketService) =
   // Get confusion matrix
   router.get('/confusion-matrix', async (req: express.Request, res: express.Response) => {
     try {
-      const cm = await mlService.getConfusionMatrix();
+      const cm = await mlService.getConfusionMatrix({
+        model_name: typeof req.query.model_name === 'string' ? req.query.model_name : undefined,
+        dataset_name: typeof req.query.dataset_name === 'string' ? req.query.dataset_name : undefined,
+      });
       res.json(cm);
     } catch (error: any) {
       console.error('Confusion matrix error:', error);
@@ -99,7 +102,10 @@ export const modelRoutes = (mlService: MLService, wsService: WebSocketService) =
   // Get ROC curve
   router.get('/roc', async (req: express.Request, res: express.Response) => {
     try {
-      const roc = await mlService.getROCCurve();
+      const roc = await mlService.getROCCurve({
+        model_name: typeof req.query.model_name === 'string' ? req.query.model_name : undefined,
+        dataset_name: typeof req.query.dataset_name === 'string' ? req.query.dataset_name : undefined,
+      });
       res.json(roc);
     } catch (error: any) {
       console.error('ROC curve error:', error);

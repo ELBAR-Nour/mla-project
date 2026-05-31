@@ -1,0 +1,2 @@
+export const MAX_ANNOTATION_BUDGET = 200;
+export const DEFAULT_ANNOTATION_BUDGET = 200;

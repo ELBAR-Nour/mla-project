@@ -13,6 +13,7 @@ import {
 } from "@/components/ui/select";
 import { Button } from "@/components/ui/button";
 import { useApp } from "@/lib/store";
+import { MAX_ANNOTATION_BUDGET } from "@/lib/constants";
 import { toast } from "sonner";
 
 export const Route = createFileRoute("/settings")({
@@ -62,12 +63,12 @@ function SettingsPage() {
             <Slider
               value={[budget]}
               min={10}
-              max={80}
+              max={MAX_ANNOTATION_BUDGET}
               step={5}
               onValueChange={(v) => setBudget(v[0])}
             />
             <div className="flex justify-between text-xs text-muted-foreground font-mono-num">
-              <span>10</span><span>80</span>
+              <span>10</span><span>{MAX_ANNOTATION_BUDGET}</span>
             </div>
           </div>
         </ChartContainer>

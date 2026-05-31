@@ -90,9 +90,10 @@ class AnnotationRequest(BaseModel):
     image_id: int
     action: str  # "predict" or "request_label"
     budget_remaining: int
+    max_budget: int = 200
 
 class StrategyComparisonRequest(BaseModel):
-    query_budget: int = 50
+    query_budget: int = 200
     num_runs: int = 3
     strategies: List[str] = ["random", "margin", "entropy", "bald", "badge", "dqn", "double_dqn", "dueling_dqn"]
 
@@ -136,11 +137,11 @@ def _class_labels(ds: DatasetService) -> List[str]:
     labels = ds.info.get("label", {})
     return [labels.get(str(i), labels.get(i, str(i))) for i in range(ds.n_classes)]
 
-def _ensure_model_evaluated(dataset_name: str = "PneumoniaMNIST") -> DatasetService:
+def _ensure_model_evaluated(dataset_name: str = "PneumoniaMNIST", model_name: Optional[str] = None) -> DatasetService:
     if model_service is None:
         raise HTTPException(status_code=503, detail="Model service not ready")
     ds = _ensure_dataset_loaded(dataset_name, "train")
-    model = model_service.ensure_model_loaded()
+    model = model_service.ensure_model_loaded(model_name)
     metrics, probs, labels = model_service.evaluate(model, ds.test_loader, ds.n_classes, return_raw=True)
     model_service.latest_metrics = metrics
     model_service.latest_probs = probs
@@ -376,24 +377,29 @@ async def get_model_metrics():
         raise HTTPException(status_code=400, detail=str(e))
 
 @app.get("/model/confusion-matrix")
-async def get_confusion_matrix():
+async def get_confusion_matrix(model_name: Optional[str] = None, dataset_name: str = "PneumoniaMNIST"):
     """Get confusion matrix"""
     try:
-        ds = _ensure_model_evaluated()
+        ds = _ensure_model_evaluated(dataset_name=dataset_name, model_name=model_name)
         cm = model_service.get_confusion_matrix()
         return {
             "matrix": cm.tolist(),
             "labels": _class_labels(ds),
+            "model_name": model_service.active_model_name,
+            "dataset_name": ds.dataset_name,
+            "metrics": model_service.latest_metrics,
         }
     except Exception as e:
         raise HTTPException(status_code=400, detail=str(e))
 
 @app.get("/model/roc")
-async def get_roc_curve():
+async def get_roc_curve(model_name: Optional[str] = None, dataset_name: str = "PneumoniaMNIST"):
     """Get ROC curve data"""
     try:
-        _ensure_model_evaluated()
+        ds = _ensure_model_evaluated(dataset_name=dataset_name, model_name=model_name)
         roc_data = model_service.get_roc_curve()
+        roc_data["model_name"] = model_service.active_model_name
+        roc_data["dataset_name"] = ds.dataset_name
         return roc_data
     except Exception as e:
         raise HTTPException(status_code=400, detail=str(e))
@@ -409,7 +415,8 @@ async def process_annotation(request: AnnotationRequest):
         result = await annotation_service.process_annotation(
             image_id=request.image_id,
             action=request.action,
-            budget_remaining=request.budget_remaining
+            budget_remaining=request.budget_remaining,
+            max_budget=request.max_budget
         )
         
         return result
@@ -437,7 +444,7 @@ async def compare_strategies(request: StrategyComparisonRequest):
         raise HTTPException(status_code=400, detail=str(e))
 
 @app.get("/strategy/random")
-async def get_random_strategy_results(queries: int = 50):
+async def get_random_strategy_results(queries: int = 200):
     """Get results from random sampling strategy"""
     try:
         if annotation_service is None:
@@ -449,7 +456,7 @@ async def get_random_strategy_results(queries: int = 50):
         raise HTTPException(status_code=400, detail=str(e))
 
 @app.get("/strategy/entropy")
-async def get_entropy_strategy_results(queries: int = 50):
+async def get_entropy_strategy_results(queries: int = 200):
     """Get results from entropy sampling strategy"""
     try:
         if annotation_service is None:
@@ -461,7 +468,7 @@ async def get_entropy_strategy_results(queries: int = 50):
         raise HTTPException(status_code=400, detail=str(e))
 
 @app.get("/strategy/rl")
-async def get_rl_strategy_results(queries: int = 50):
+async def get_rl_strategy_results(queries: int = 200):
     """Get results from RL agent strategy"""
     try:
         if annotation_service is None:

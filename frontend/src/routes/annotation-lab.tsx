@@ -36,6 +36,7 @@ function AnnotationLab() {
     loadingDecision,
     liveError,
     budget,
+    budgetUsed,
     strategy,
     rl,
     stepOnce,
@@ -49,7 +50,7 @@ function AnnotationLab() {
 
   const current = samples[currentIndex] ?? null;
   const upcoming = samples.slice(currentIndex + 1, currentIndex + 7);
-  const used = history.filter((h) => h.action === "label").length;
+  const used = budgetUsed();
   const lastStep = history[history.length - 1] ?? null;
   const strategyInfo = strategyById[strategy];
   const policyMode = isRLStrategy(strategy);

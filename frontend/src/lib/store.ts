@@ -3,12 +3,14 @@ import {
   getDatasetBatch,
   getModelArtifacts,
   initializeDataset,
+  processAnnotation,
   runModelInference,
   runRLDecision,
   type DatasetSample,
   type ModelArtifact,
   type RLDecisionResult,
 } from "./api";
+import { DEFAULT_ANNOTATION_BUDGET, MAX_ANNOTATION_BUDGET } from "./constants";
 import { isRLStrategy, strategyById, type Strategy } from "./strategies";
 
 export type Dataset = "PneumoniaMNIST" | "BreastMNIST";
@@ -47,6 +49,8 @@ export interface StepRecord {
   expectedReward: number;
   exploration: boolean;
   isPolicyReward: boolean;
+  budgetUsed: number;
+  budgetRemaining: number;
 }
 
 export interface RLConfig {
@@ -112,7 +116,7 @@ function mulberry32(seed: number) {
   };
 }
 
-const livePoolSize = 80;
+const livePoolSize = MAX_ANNOTATION_BUDGET;
 
 function sampleDisplayId(dataset: Dataset, imageId: number) {
   const prefix = dataset === "PneumoniaMNIST" ? "PNEU" : "BRST";
@@ -189,7 +193,7 @@ function errorMessage(exc: unknown, fallback: string) {
   return exc instanceof Error ? exc.message : fallback;
 }
 
-function buildPool(dataset: Dataset, n = 80): Sample[] {
+function buildPool(dataset: Dataset, n = MAX_ANNOTATION_BUDGET): Sample[] {
   const rng = mulberry32(dataset === "PneumoniaMNIST" ? 42 : 91);
   const prefix = dataset === "PneumoniaMNIST" ? "PNEU" : "BRST";
   return Array.from({ length: n }, (_, i) => {
@@ -280,7 +284,7 @@ const initialDataset: Dataset = "PneumoniaMNIST";
 export const useApp = create<AppState>((set, get) => ({
   dataset: initialDataset,
   strategy: "dueling_dqn",
-  budget: 60,
+  budget: DEFAULT_ANNOTATION_BUDGET,
   rl: { epsilon: 0.1, rewardScale: 1.0, batchSize: 16, learningRate: 0.0003, discount: 0.95 },
   theme: "light",
   visibleStrategies: {
@@ -316,7 +320,7 @@ export const useApp = create<AppState>((set, get) => ({
     liveError: null,
   }),
   setStrategy: (s) => set({ strategy: s }),
-  setBudget: (b) => set({ budget: b }),
+  setBudget: (b) => set({ budget: Math.min(Math.max(Math.round(b), 1), MAX_ANNOTATION_BUDGET) }),
   setRL: (k, v) => set((st) => ({ rl: { ...st.rl, [k]: v } })),
   setSpeed: (n) => set({ speedMs: n }),
   toggleTheme: () =>
@@ -476,7 +480,7 @@ export const useApp = create<AppState>((set, get) => ({
       st = get();
       if (!st.samples[idx]?.liveLoaded) return;
     }
-    const used = st.history.filter((h) => h.action === "label").length;
+    const used = st.budgetUsed();
     if (used >= st.budget && st.strategy !== "random") {
       // budget exhausted → force predict
     }
@@ -486,14 +490,35 @@ export const useApp = create<AppState>((set, get) => ({
     let action = decision.action;
     if (action === "label" && used >= st.budget) action = "predict";
     const outcome = computeReward(sample, action, st.rl);
-    const reward = isRLStrategy(st.strategy) ? outcome.reward : 0;
-    const correct = outcome.correct;
+    let reward = isRLStrategy(st.strategy) ? outcome.reward : 0;
+    let correct = outcome.correct;
+    let budgetUsed = used + (action === "label" ? 1 : 0);
+    let budgetRemaining = Math.max(st.budget - budgetUsed, 0);
+
+    if (st.dataMode === "live") {
+      try {
+        const annotation = await processAnnotation({
+          image_id: sample.imageId,
+          action: action === "label" ? "request_label" : "predict",
+          budget_remaining: Math.max(st.budget - used, 0),
+          max_budget: st.budget,
+        });
+        budgetUsed = annotation.budget_used;
+        budgetRemaining = annotation.budget_remaining;
+        correct = annotation.correct;
+        if (isRLStrategy(st.strategy)) reward = +annotation.reward.toFixed(3);
+      } catch (exc) {
+        set({
+          liveError: errorMessage(exc, "Could not sync the annotation budget with the ML service."),
+        });
+      }
+    }
 
     const correctSoFar =
       st.history.reduce((a, h) => a + (h.correct ? 1 : 0), 0) + (correct ? 1 : 0);
     const accuracy = correctSoFar / (st.history.length + 1);
     // AUC saturates with labels acquired
-    const labelsCount = used + (action === "label" ? 1 : 0);
+    const labelsCount = budgetUsed;
     const auc = +Math.min(0.97, 0.62 + 0.34 * (1 - Math.exp(-labelsCount / 18))).toFixed(3);
 
     const record: StepRecord = {
@@ -510,10 +535,12 @@ export const useApp = create<AppState>((set, get) => ({
       expectedReward: decision.expectedReward,
       exploration: decision.exploration,
       isPolicyReward: isRLStrategy(st.strategy),
+      budgetUsed,
+      budgetRemaining,
     };
     set({ history: [...st.history, record], currentIndex: idx + 1 });
   },
 
-  budgetUsed: () => get().history.filter((h) => h.action === "label").length,
-  remaining: () => get().budget - get().history.filter((h) => h.action === "label").length,
+  budgetUsed: () => get().history.at(-1)?.budgetUsed ?? get().history.filter((h) => h.action === "label").length,
+  remaining: () => get().history.at(-1)?.budgetRemaining ?? get().budget - get().history.filter((h) => h.action === "label").length,
 }));

@@ -205,11 +205,12 @@ export class MLService {
   }
 
   // Annotation endpoints
-  async processAnnotation(imageId: number, action: string, budgetRemaining: number): Promise<AnnotationResult> {
+  async processAnnotation(imageId: number, action: string, budgetRemaining: number, maxBudget?: number): Promise<AnnotationResult> {
     const response = await this.client.post('/annotate', {
       image_id: imageId,
       action,
       budget_remaining: budgetRemaining,
+      max_budget: maxBudget,
     });
     return response.data;
   }
@@ -257,13 +258,13 @@ export class MLService {
     return response.data;
   }
 
-  async getConfusionMatrix(): Promise<any> {
-    const response = await this.client.get('/model/confusion-matrix');
+  async getConfusionMatrix(params?: { model_name?: string; dataset_name?: string }): Promise<any> {
+    const response = await this.client.get('/model/confusion-matrix', { params });
     return response.data;
   }
 
-  async getROCCurve(): Promise<any> {
-    const response = await this.client.get('/model/roc');
+  async getROCCurve(params?: { model_name?: string; dataset_name?: string }): Promise<any> {
+    const response = await this.client.get('/model/roc', { params });
     return response.data;
   }
 
